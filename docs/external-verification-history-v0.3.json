@@ -1,0 +1,27 @@
+{
+  "attempts": [
+    {
+      "checked_at_utc": "2026-10-15T00:32:52.988563+00:00",
+      "test_kind": "external_real",
+      "url": "https://sei.iphan.gov.br/pesquisapublica",
+      "received": true,
+      "document_obtained": false,
+      "iphan_process_collection_homologated": false,
+      "state": "waiting_for_user",
+      "code": "access_barrier",
+      "action": "Página de login/CAPTCHA recebida; importe manualmente, sem contornar controles"
+    },
+    {
+      "checked_at_utc": "2026-10-15T00:43:21.902162+00:00",
+      "test_kind": "external_real",
+      "url": "https://sei.iphan.gov.br/pesquisapublica",
+      "received": true,
+      "document_obtained": false,
+      "iphan_process_collection_homologated": false,
+      "state": "waiting_for_user",
+      "code": "dns_timeout",
+      "action": "Resolução da origem excedeu 5 segundos; tente depois ou importe manualmente"
+    }
+  ],
+  "note": "Observações reais de execução; classificação de barreira por indicadores HTML, sem homologação positiva"
+}

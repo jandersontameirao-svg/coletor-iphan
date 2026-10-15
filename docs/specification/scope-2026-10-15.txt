@@ -1,0 +1,20 @@
+DECISÃO DE ESCOPO — 15/10/2026
+A coleta recebe exclusivamente link ou lista de links fornecidos pela interface
+ou pela ATENA OS. Não implementar busca automática de processos no portal.
+
+Receber/registrar links, acessar links autorizados/obter documentos e armazenar/
+extrair/disponibilizar resultados são etapas distintas. Sem acesso: pendência
+e alternativa de importação manual. Não contornar login, CAPTCHA ou restrições.
+
+Prioridades: registro canônico compartilhado; permissões read/operate/review/admin;
+grupos, serviço e delegação verificável; resultados individuais, idempotência e
+SSRF; parser PDF isolado e lease renovado; ExtractionRun versionado, reutilização
+e reprocessamento explícito; resolução/retomada que preserve resultados; oito
+telas com navegação superior, contexto e indicadores distintos.
+
+Continuam no planejamento: biblioteca técnica, OCR, geografia, pesquisa por
+KML/entorno e conhecimento validado. A decisão de links não elimina requisitos.
+
+Preservar/reexecutar os 22 testes originais, acrescentar testes dos achados,
+separar fixture de acesso externo real, atualizar OpenAPI/docs/matriz/demonstração
+e entregar pacote revisável com corrigido/testado/pendente/bloqueado.

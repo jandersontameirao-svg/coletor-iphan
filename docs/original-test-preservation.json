@@ -1,0 +1,22 @@
+{
+  "coletor-iphan/tests/test_http_contract.py": {
+    "baseline_sha256": "19793a988fb61a282e80f57e5d4c99190bc71a9c31b1a4fb574f9c2b8ae08cec",
+    "current_sha256": "19793a988fb61a282e80f57e5d4c99190bc71a9c31b1a4fb574f9c2b8ae08cec",
+    "unchanged": true
+  },
+  "coletor-iphan/tests/test_migration.py": {
+    "baseline_sha256": "17be2e87153039ec33495ac46ca559cb41be5e1bf387ead7a73a10e110a18e7e",
+    "current_sha256": "17be2e87153039ec33495ac46ca559cb41be5e1bf387ead7a73a10e110a18e7e",
+    "unchanged": true
+  },
+  "coletor-iphan/tests/test_queue.py": {
+    "baseline_sha256": "576cdac7133a453a76d613db94bbc63f482103f3b227a8ff0dbca3f80074dc2d",
+    "current_sha256": "576cdac7133a453a76d613db94bbc63f482103f3b227a8ff0dbca3f80074dc2d",
+    "unchanged": true
+  },
+  "coletor-iphan/tests/test_repository.py": {
+    "baseline_sha256": "4c697c6bb73a10747548f1c0514496c51680a8cc0ae79b7feaaff7d423670340",
+    "current_sha256": "4c697c6bb73a10747548f1c0514496c51680a8cc0ae79b7feaaff7d423670340",
+    "unchanged": true
+  }
+}
