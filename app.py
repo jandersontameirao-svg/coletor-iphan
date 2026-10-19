@@ -632,7 +632,27 @@ async def response_policy(request: Request,call_next):
     return response
 
 @app.get('/',response_class=HTMLResponse)
-def ui(): return Path(__file__).with_name('index.html').read_text()
+def ui():
+    page = Path(__file__).with_name('index.html').read_text()
+    if DEMO_MODE:
+        replacements = {
+            '{{LOGIN_LABEL}}': 'AMBIENTE DE CONSTRUÇÃO',
+            '{{LOGIN_MESSAGE}}': 'Esta versão está aberta para avaliação visual e funcional, sem exigir senha.',
+            '{{CREDENTIAL_LOGIN_HIDDEN}}': 'hidden',
+            '{{DEMO_ACCESS_HIDDEN}}': '',
+            '{{LOGIN_FOOTER}}': 'Para o ambiente operacional, a autenticação e as permissões continuam obrigatórias.',
+        }
+    else:
+        replacements = {
+            '{{LOGIN_LABEL}}': 'ACESSO AO ACERVO',
+            '{{LOGIN_MESSAGE}}': 'Entre para consultar o repositório e acompanhar o trabalho da sua equipe.',
+            '{{CREDENTIAL_LOGIN_HIDDEN}}': '',
+            '{{DEMO_ACCESS_HIDDEN}}': 'hidden',
+            '{{LOGIN_FOOTER}}': 'Credenciais definidas pelo administrador. Nenhuma senha padrão.',
+        }
+    for marker, value in replacements.items():
+        page = page.replace(marker, value)
+    return HTMLResponse(page)
 
 import access_routes
 import catalog_routes

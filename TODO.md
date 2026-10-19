@@ -11,6 +11,7 @@
 - [x] Manter contratos de integração sem declarar homologação real com IPHAN, ATENA ou Geoportal.
 - [x] Aplicar a marca local e o padrão visual do Grupo Arqueo à interface do Coletor.
 - [x] Disponibilizar demonstração sintética somente de leitura para processos, documentos, evidências, conhecimento e geografia.
+- [x] Abrir automaticamente a demonstração de construção sem senha, com sessão sintética de leitura e bloqueio de escrita preservado.
 - [x] Configurar container Python 3.12 com `PORT`, health check em `/_app/health`, manifesto de rotas e suporte ao Preview Webdev.
 
 ## Entrega atual

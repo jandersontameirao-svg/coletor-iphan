@@ -22,7 +22,7 @@ Bootstrap solicita administrador/senha sem ecoar a senha; mínimo 12 caracteres 
 python worker.py
 ```
 
-Abra http://127.0.0.1:8000. As telas são visão geral, entrada de links, tarefas, processos, documentos/revisões, biblioteca, integrações e administração. Seleção de processo e filtro da biblioteca persistem durante a sessão. API/OpenAPI em `/openapi.json`, documentação interativa em `/docs`. O snapshot do contrato acompanha a entrega em `docs/openapi.json`.
+Abra http://127.0.0.1:8000. As telas são visão geral, entrada de links, tarefas, processos, documentos/revisões, biblioteca, integrações e administração. Seleção de processo e filtro da biblioteca persistem durante a sessão. API/OpenAPI em `/openapi.json`, documentação interativa em `/docs`. O snapshot do contrato acompanha a entrega em `docs/openapi.json`. Quando `COLLECTOR_DEMO_MODE=1`, a interface abre automaticamente a sessão sintética sem senha e permanece somente de leitura; fora desse modo, o login continua obrigatório.
 
 O lock inclui dependências transitivas de runtime e testes HTTP, com hashes de wheels para este ambiente. Instalação em venv nova foi realizada com os wheels previamente baixados, sem acesso ao índice durante a instalação. O ambiente de construção usou Python 3.12.14, Chromium 154.0.8037.57 e Playwright 1.62.0. Wheels não acompanham o ZIP; instalação a partir do índice depende de conectividade. Não confundir isso com uma imagem Docker ou homologação de implantação.
 
