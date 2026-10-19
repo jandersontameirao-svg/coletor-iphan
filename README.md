@@ -1,6 +1,6 @@
-# Coletor IPHAN — versão 0.3.0
+# Coletor IPHAN — versão 0.4.0
 
-Continuação da base 0.2, preservando seus quatro arquivos com 22 testes byte a byte. Nesta entrega: processo canônico compartilhado, ACLs por recurso, grupos, contas de serviço/delegação, entrada por link/lista, download direto protegido, resolução manual, extração isolada/versionada e interface com oito telas. **Registro de tarefa não comprova obtenção de documento. Coleta de processo/anexos IPHAN e integração ATENA real não estão homologadas.**
+Continuação da base 0.2, preservando seus quatro arquivos com 22 testes byte a byte. Nesta entrega: processo canônico compartilhado, ACLs por recurso, grupos, contas de serviço/delegação, entrada por link/lista, download direto protegido, resolução manual, extração isolada/versionada, conhecimento rastreável e geografia KML/KMZ. **Registro de tarefa não comprova obtenção de documento. Coleta de processo/anexos IPHAN e integração ATENA real não estão homologadas.**
 
 A especificação original está em `docs/specification/original.txt`; a decisão atual de entrada exclusivamente por links está em `docs/specification/scope-2026-10-15.txt`. Não há busca automática de processos por número ou consulta ao portal. Número continua necessário para cadastrar a identidade de um processo no catálogo.
 
@@ -61,7 +61,7 @@ Worker executa parser em subprocesso com ambiente sem credenciais herdadas: 512 
 
 Cada execução tem `ExtractionRun`: revisão, ferramenta, versão, estado, início/fim, falha e IDs das evidências. Extração padrão reutiliza execução concluída da mesma versão; pedidos assíncronos concorrentes compartilham a tarefa. Reprocessamento explícito cria novo histórico. PDF sem páginas, TXT vazio e parsing inválido falham; páginas sem texto sinalizam `needs_ocr` sem evidências vazias/fictícias. TXT não recebe página ou contagem de páginas fictícia. OCR permanece indisponível.
 
-Biblioteca é índice sobre documentos, com tipos PAPIPA, RAPIPA, PAIPA, RAIPA, PGPA, RAIPI e educação patrimonial. Taxonomia seed versionada, ainda sem aprovação do responsável técnico. Classificação pelo revisor autorizado exige revisão existente e permissão review. Alterações preservam predecessor; não há classificador automático. Busca textual recupera somente evidências autorizadas; não há busca semântica, espacial ou afirmação factual automática.
+Biblioteca é índice sobre documentos, com tipos PAPIPA, RAPIPA, PAIPA, RAIPA, PGPA, RAIPI e educação patrimonial. Taxonomia seed versionada, ainda sem aprovação do responsável técnico. Classificação pelo revisor autorizado exige revisão existente e permissão review. Alterações preservam predecessor; não há classificador automático. Busca textual recupera somente evidências autorizadas; não há busca semântica nem afirmação factual automática. A busca espacial por KML/KMZ WGS84 e entorno em metros é uma capacidade específica da extensão 0.4.
 
 Lease de 120 segundos renovado periodicamente por heartbeat; exclusividade/fencing da tarefa e da execução de extração. Recuperação cria uma nova execução vinculada ao novo lease: o worker antigo não altera o run do substituto. Resultados/checkpoint/outbox são transacionais. Uma unidade de extração interrompida reinicia essa unidade; coleta retoma a lista pelos itens já confirmados. Ver `docs/queue.md`.
 
@@ -102,7 +102,7 @@ python reference_client.py --links-file links.txt --process-id ID_DO_PROCESSO
 
 Verificação externa é separada: `python scripts/verify_external.py --url LINK_AUTORIZADO`. Em 15/10, a pesquisa pública do SEI devolveu HTML com indicadores de barreira em uma tentativa e timeout DNS em outra. Nenhum documento de processo foi obtido nessa homologação; ATENA OS real não foi acessada. Detalhes em `docs/iphan-verification.md`.
 
-F1 avançou, mas o aceite integral da especificação original ainda depende de PostgreSQL e demais requisitos. PostGIS/KML/entorno métrico, OCR, outros formatos, conhecimento validado, especialistas, organizações/múltiplos domínios, vínculos temporais de projeto, transporte/consumidores da outbox, CI/Compose, retenção, hardening e homologação externa seguem pendentes. A base auditada antiga ATENA e seus achados A01–A15 continuam indisponíveis; o pacote 0.2 utilizado aqui é a base independente já criada. Não houve publicação ou implantação externa. Ver relatório de corrigido/testado/pendente/bloqueado em `docs/release-0.3.md` e matriz em `docs/matrix.md`.
+F1 avançou, mas o aceite integral da especificação original ainda depende de PostgreSQL/PostGIS em servidor real e demais requisitos. OCR efetivo, outros formatos, especialistas, organizações/múltiplos domínios, vínculos temporais de projeto, transporte/consumidores da outbox, CI/Compose, retenção, hardening e homologação externa seguem pendentes. A base auditada antiga ATENA e seus achados A01–A15 continuam indisponíveis; o pacote 0.2 utilizado aqui é a base independente já criada. A publicação demonstrativa não equivale a implantação operacional. Ver relatório de corrigido/testado/pendente/bloqueado em `docs/release-0.4.md` e matriz em `docs/matrix.md`.
 
 ## Extensão 0.4 no escopo real do Coletor
 

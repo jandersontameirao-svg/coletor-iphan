@@ -1,37 +1,37 @@
-# Plano de publicação — Coletor IPHAN 0.4
+# Plano de entrega — Coletor IPHAN 0.4
 
 ## Objetivo
 
-Publicar uma **demonstração isolada** da versão 0.4 já validada do Coletor IPHAN, para avaliação visual e funcional. A publicação não recebe acervo, usuários, tokens, banco ou segredos da versão local. O estado do container é temporário e contém apenas registros sintéticos.
+Entregar e publicar a versão 0.4 do Coletor IPHAN como repositório técnico rastreável para processos, documentos, evidências, conhecimento e geografia. O produto não possui módulos financeiros, comerciais, de empresas, contratos, fluxo de caixa, DRE ou EBITDA. Esses temas não fazem parte desta entrega e não serão adicionados ao aplicativo.
 
-## Implementação
+## Escopo implementado
 
-A aplicação FastAPI existente será publicada em um container Python 3.12. O listener usará `PORT` e responderá ao health check não autenticado em `/_app/health`. O projeto manterá os assets e as rotas existentes, com uma adaptação condicional para permitir o iframe de Preview/Webdev apenas quando `COLLECTOR_ALLOW_EMBED=1`.
+A fundação do Coletor mantém cadastro de processos canônicos, permissões por processo, grupos, contas de serviço, delegações e auditoria. Documentos PDF/TXT são preservados por hash SHA-256, com revisões, ocorrências, origem, download protegido e extração assíncrona. A entrada externa é feita somente por links explícitos ou importação manual autorizada; o sistema não busca processos, anexos ou páginas automaticamente no IPHAN.
 
-O modo de demonstração é habilitado exclusivamente por `COLLECTOR_DEMO_MODE=1`. Nesse modo, a inicialização cria um usuário público com permissão somente de leitura, um processo sintético, um documento com evidência, uma afirmação validada e um recurso espacial KML normalizado. Uma sessão de visualização é emitida por endpoint público específico do modo de demonstração. Não são criados privilégios de operação, revisão, administração, coleta externa ou alteração dos dados.
+A versão 0.4 acrescenta uma camada de conhecimento rastreável. Cada afirmação exige uma evidência existente e autorizada e pode receber tipo, confiança, revisão humana, validação, rejeição, conflito e relações com outras afirmações. O sistema não gera fatos automaticamente.
 
-A publicação usa filesystem temporário para SQLite e não inicia o worker. Consequentemente, a demonstração não deve receber dados reais nem ser usada como produção. A versão local 0.3 e a prévia 0.4 existente permanecem sem modificações.
+A mesma versão adiciona recursos espaciais em KML/KMZ. Os recursos são validados em WGS84/EPSG:4326, recebem revisões e podem ser consultados por latitude, longitude e entorno em metros usando distância geodésica. O vínculo espacial não substitui nem duplica os documentos do acervo.
 
-## Design
+O OCR é condicional: quando o motor não existe, um PDF digitalizado é indicado como `needs_ocr`, sem criação de evidência vazia ou fictícia. As integrações com IPHAN, ATENA e Geoportal não são declaradas homologadas. Login, CAPTCHA, descoberta automática e coleta de anexos permanecem fora do escopo por segurança e proveniência.
 
-- **Movimento:** interface de acervo técnico institucional, usando a identidade visual já aplicada do Grupo Arqueo.
-- **Princípios:** rastreabilidade, hierarquia documental, contraste funcional e exposição explícita de limites operacionais.
-- **Cores:** azul-marinho para confiança e navegação; laranja para ações; vinho em marcadores institucionais; fundos neutros para leitura de metadados.
-- **Layout:** navegação horizontal, contexto de processo lateral e painéis sequenciais de evidências.
-- **Elementos distintivos:** marca local, chips de permissão/status e painéis de proveniência.
-- **Interações:** a demonstração oferece acesso de leitura em um clique; ações mutáveis permanecem indisponíveis para o usuário demonstrativo.
-- **Animação:** transições nativas discretas; sem animações que possam ocultar estado do acervo.
-- **Tipografia:** pilha de sistema para densidade e legibilidade técnica.
-- **Essência da marca:** acervo técnico rastreável para patrimônio cultural; preciso, responsável e institucional.
-- **Voz:** direta e verificável. Exemplos: “A evidência antecede a conclusão.” e “Consulta demonstrativa com dados sintéticos.”
-- **Wordmark:** o logo oficial local do Grupo Arqueo acompanha o nome Coletor IPHAN sem substituir a identidade do produto.
-- **Cor de assinatura:** laranja institucional aplicado somente a ações e estados de foco.
+## Interface e identidade visual
+
+A interface é uma aplicação FastAPI servida pelo próprio backend, com telas para Visão geral, Entrada de links, Tarefas, Processos, Documentos, Biblioteca, Integrações, Administração, Conhecimento e Pesquisa espacial. Ela usa a marca local do Grupo Arqueo e uma linguagem técnica, objetiva e transparente. O cabeçalho, as cores institucionais e os avisos de capacidade foram mantidos como referência visual do Grupo Arqueo, sem transformar o Coletor em outro produto.
+
+## Demonstração e publicação
+
+O modo demonstrativo usa somente registros sintéticos: processo, documento, evidência, afirmação e área espacial. A sessão pública é estritamente de leitura. Escrita, importação, coleta, edição de permissões, criação de usuários e administração são bloqueadas. O container responde em `/_app/health`, atende a porta `PORT` e permite Preview incorporado quando habilitado apenas para o runtime Webdev.
+
+A publicação é feita no ambiente Manus por Dockerfile Python 3.12. O banco SQLite do container é efêmero e o worker não é iniciado na demonstração; portanto, a publicação é adequada para avaliação funcional e visual, não para operação com acervo real.
 
 ## Estrutura
 
-- `app.py`: API FastAPI, interface e modo de demonstração condicional.
-- `demo_mode.py`: dados sintéticos e emissão de sessão pública de leitura.
-- `Dockerfile`: runtime Python 3.12 publicado.
-- `index.html`, `ui.js`, `advanced_ui.js`, `styles.css`: interface existente da versão 0.4.
-- `manus-routes.json`: manifesto de rota do site.
-- `docs/`: contratos, escopo e relatório técnico já validado.
+- `app.py`: API FastAPI, inicialização, autenticação, recursos de acervo, demonstração e assets.
+- `catalog_routes.py` e `access_routes.py`: catálogo, documentos, permissões, grupos, contas de serviço e delegação.
+- `advanced_routes.py`: conhecimento rastreável, KML/KMZ, pesquisa espacial e contrato de capacidades.
+- `knowledge_domain.py` e `geo_domain.py`: migrações e regras dos domínios 0.4.
+- `task_queue.py`, `worker.py`, `extraction.py` e `safe_fetch.py`: fila durável, extração isolada e coleta limitada a links explícitos.
+- `index.html`, `ui.js`, `advanced_ui.js` e `styles.css`: interface do Coletor.
+- `demo_mode.py`: dados sintéticos e sessão pública somente de leitura.
+- `Dockerfile`: execução do container de demonstração.
+- `tests/`: regressão da base e cobertura da extensão 0.4.
