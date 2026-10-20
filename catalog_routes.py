@@ -21,6 +21,28 @@ class LinkCorrection(BaseModel):
     url: str = Field(min_length=1,max_length=4096)
 
 
+def _analysis_summary(c, process_id):
+    process=c.execute('SELECT id,number,title,folder FROM processes WHERE id=?',(process_id,)).fetchone()
+    documents=c.execute('SELECT count(*) FROM documents WHERE process_id=?',(process_id,)).fetchone()[0]
+    extracted=c.execute("SELECT count(DISTINCT d.id) FROM documents d JOIN revisions r ON r.document_id=d.id JOIN extraction_runs x ON x.revision_id=r.id WHERE d.process_id=? AND x.state='completed'",(process_id,)).fetchone()[0]
+    ocr_required=c.execute("SELECT count(DISTINCT d.id) FROM documents d JOIN revisions r ON r.document_id=d.id JOIN extraction_runs x ON x.revision_id=r.id WHERE d.process_id=? AND x.state='needs_ocr' AND NOT EXISTS (SELECT 1 FROM extraction_runs x2 JOIN revisions r2 ON r2.id=x2.revision_id WHERE r2.document_id=d.id AND x2.state='completed')",(process_id,)).fetchone()[0]
+    classified=c.execute("SELECT count(*) FROM documents d WHERE d.process_id=? AND EXISTS (SELECT 1 FROM classifications cl WHERE cl.document_id=d.id AND cl.rowid=(SELECT max(cl2.rowid) FROM classifications cl2 WHERE cl2.document_id=d.id) AND cl.status='validated')",(process_id,)).fetchone()[0]
+    pending_classification=c.execute("SELECT count(*) FROM documents d WHERE d.process_id=? AND (NOT EXISTS (SELECT 1 FROM classifications cl WHERE cl.document_id=d.id) OR EXISTS (SELECT 1 FROM classifications cl WHERE cl.document_id=d.id AND cl.rowid=(SELECT max(cl2.rowid) FROM classifications cl2 WHERE cl2.document_id=d.id) AND cl.status IN ('proposed','rejected'))) ",(process_id,)).fetchone()[0]
+    evidence=c.execute('SELECT count(*) FROM evidence e JOIN revisions r ON r.id=e.revision_id JOIN documents d ON d.id=r.document_id WHERE d.process_id=?',(process_id,)).fetchone()[0]
+    assertions=c.execute("SELECT count(*) FROM knowledge_assertions WHERE process_id=? AND status='validated'",(process_id,)).fetchone()[0]
+    pending_review=c.execute("SELECT count(*) FROM knowledge_assertions WHERE process_id=? AND status IN ('proposed','conflict')",(process_id,)).fetchone()[0]
+    if not documents:
+        status='not_started'
+    elif extracted==documents and classified==documents and ocr_required==0 and pending_review==0:
+        status='analyzed'
+    elif extracted or classified or evidence:
+        status='in_progress'
+    else:
+        status='pending'
+    progress=0 if not documents else round(((extracted+classified)/(documents*2))*100)
+    return {'process_id':process_id,'number':process['number'],'title':process['title'],'folder':process['folder'],'status':status,'documents':documents,'extracted_documents':extracted,'ocr_required':ocr_required,'classified_documents':classified,'pending_classification':pending_classification,'evidence':evidence,'knowledge_validated':assertions,'knowledge_pending_review':pending_review,'progress_percent':progress}
+
+
 def register(app,db,event,identity,uid,revision_access,job_status,authorize_job):
     @app.get('/v1/taxonomy')
     def taxonomy(user=Depends(identity)):
@@ -60,7 +82,18 @@ def register(app,db,event,identity,uid,revision_access,job_status,authorize_job)
                 try: authorization.process_access(c,row['process_id'],user)
                 except HTTPException: continue
                 result.append(dict(row))
-            return {'items':result,'originals_copied':False}
+        return {'items':result,'originals_copied':False}
+
+    @app.get('/v1/analysis/processes')
+    def analysis_processes(user=Depends(identity)):
+        with db() as c:
+            items=[]
+            for row in c.execute('SELECT id FROM processes WHERE canonical_id IS NULL ORDER BY folder').fetchall():
+                try: pid=authorization.process_access(c,row['id'],user)['id']
+                except HTTPException: continue
+                items.append(_analysis_summary(c,pid))
+            totals={'processes':len(items),'analyzed':sum(item['status']=='analyzed' for item in items),'in_progress':sum(item['status']=='in_progress' for item in items),'pending':sum(item['status'] in ('pending','not_started') for item in items),'ocr_required':sum(item['ocr_required'] for item in items),'knowledge_pending_review':sum(item['knowledge_pending_review'] for item in items)}
+            return {'items':items,'totals':totals}
 
     @app.post('/v1/search')
     def search(body: Search,user=Depends(identity)):

@@ -194,7 +194,7 @@ def register(app, db, identity, uid, event, process_access, revision_access):
                 for row in rows:
                     for feature in geo_domain.search(json.loads(row['feature_json']), body.latitude, body.longitude, body.radius_m):
                         results.append({'resource_id': row['id'], 'resource_name': row['name'], 'process_id': pid, 'version': row['version'], 'srs': row['srs'], 'feature': feature})
-            return {'items': sorted(results, key=lambda item: item['feature']['distance_m']), 'spatial_available': True, 'units': 'metres', 'source': 'KML/KMZ WGS84'}
+            return {'items': sorted(results, key=lambda item: item['feature']['distance_m']), 'spatial_available': True, 'units': 'metres', 'source': 'KML/KMZ, Shapefile, GeoJSON/JSON e GPX em WGS84'}
 
     @app.get('/v1/overview/advanced')
     def advanced_overview(user=Depends(identity)):
@@ -206,7 +206,7 @@ def register(app, db, identity, uid, event, process_access, revision_access):
 
     @app.get('/v1/integration/capabilities')
     def integration_capabilities(user=Depends(identity)):
-        return {'version': '0.4.0', 'consumer_contract': True, 'atena_real_homologated': False, 'geoportal_real_homologated': False, 'explicit_links_only': True, 'knowledge': {'assertions': True, 'human_validation': True, 'automatic_facts': False}, 'spatial': {'kml': True, 'kmz': True, 'srs': ['EPSG:4326'], 'distance_units': 'metres'}, 'external_collection': {'implemented': True, 'homologated': False}}
+        return {'version': '0.5.0', 'consumer_contract': True, 'atena_real_homologated': False, 'geoportal_real_homologated': False, 'explicit_links_only': True, 'knowledge': {'assertions': True, 'human_validation': True, 'automatic_facts': False}, 'spatial': {'kml': True, 'kmz': True, 'shapefile_zip': True, 'geojson': True, 'json': True, 'gpx': True, 'pdf_document_import': True, 'srs': ['EPSG:4326'], 'distance_units': 'metres'}, 'external_collection': {'implemented': True, 'homologated': False}}
 
 
 def _can_read(c, pid, user):

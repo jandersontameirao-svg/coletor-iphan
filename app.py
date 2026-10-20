@@ -1,5 +1,5 @@
 """Coletor IPHAN: fundação local; capacidades externas não homologadas."""
-import hashlib, io, json, os, secrets, sqlite3, threading, time, uuid
+import hashlib, io, json, os, secrets, sqlite3, threading, time, uuid, zipfile
 from pathlib import Path
 from contextlib import contextmanager
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -17,6 +17,7 @@ import ocr_optional
 import demo_mode
 import sei_domain
 import sei_public
+import document_extractors
 from pypdf import PdfReader
 
 ROOT = Path(os.getenv('COLLECTOR_DATA', './data')).resolve()
@@ -250,12 +251,26 @@ def project(body: ProjectInput,user=Depends(identity)):
     with db() as c: c.execute('INSERT INTO projects VALUES(?,?,?,?)',(pid,user['id'],body.name,code))
     return {'id':pid,'code':code}
 
-def put_blob(data):
+def put_blob(data, name=''):
     if not data or len(data)>20*1024*1024: raise HTTPException(422,'Arquivo vazio ou acima de 20 MiB')
-    mime='application/pdf' if data.startswith(b'%PDF-') else 'text/plain'
-    if mime=='text/plain':
+    suffix=Path(name).suffix.lower()
+    mime='application/pdf' if data.startswith(b'%PDF-') else None
+    if mime is None and suffix in ('.docx','.xlsx'):
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                names=set(archive.namelist())
+                required='word/document.xml' if suffix=='.docx' else 'xl/workbook.xml'
+                if required not in names: raise HTTPException(415,'Arquivo Office inválido')
+            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document' if suffix=='.docx' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(415,'Arquivo Office inválido') from exc
+    elif suffix=='.csv':
+        mime='text/csv'
+    if mime is None:
+        mime='text/plain'
+    if mime in ('text/plain','text/csv'):
         try: data.decode('utf-8')
-        except UnicodeDecodeError: raise HTTPException(415,'Envie PDF ou texto UTF-8')
+        except UnicodeDecodeError: raise HTTPException(415,'Envie PDF, CSV, DOCX, XLSX ou texto UTF-8')
         if data.lstrip()[:30].lower().startswith((b'<html',b'<!doctype html')): raise HTTPException(415,'Página HTML não é documento')
     digest=hashlib.sha256(data).hexdigest();path=ROOT/'blobs'/digest
     temporary=ROOT/'blobs'/('.'+uid())
@@ -270,7 +285,14 @@ def persist_document(c,pid,name,source,user,blob,from_link=False,original_name=N
     original_name=original_name or name
     digest,mime,size=blob
     suffix=Path(name).suffix.lower()
-    if (mime=='application/pdf' and suffix not in ('','.pdf')) or (mime=='text/plain' and suffix not in ('','.txt','.csv')):
+    allowed_suffixes={
+        'application/pdf': ('','.pdf'),
+        'text/plain': ('','.txt'),
+        'text/csv': ('','.csv'),
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ('','.docx'),
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ('','.xlsx'),
+    }
+    if suffix not in allowed_suffixes.get(mime, ('',)):
         raise HTTPException(415,'Extensão não corresponde ao conteúdo verificado')
     c.execute('INSERT OR IGNORE INTO blobs VALUES(?,?,?)',(digest,size,mime))
     if from_link:
@@ -306,7 +328,7 @@ async def read_upload(request):
 async def upload(pid: str,request: Request,name: str,source: str='manual',user=Depends(identity)):
     if not name.strip() or len(name)>300 or len(source)>4096: raise HTTPException(422,'Nome/origem inválidos')
     with db() as c: pid=process_access(c,pid,user,'operate')['id']
-    blob=put_blob(await read_upload(request))
+    blob=put_blob(await read_upload(request),name)
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
         return persist_document(c,pid,name,source,user,blob)
@@ -585,7 +607,7 @@ async def manual_resolution(jid: str,item_id: str,request: Request,name: str,use
     with db() as c:
         total=c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')",(jid,)).fetchone()[0]
     if total+len(raw)>worker.BATCH_QUOTA_BYTES: raise HTTPException(413,'Limite de originais confirmados por tarefa')
-    blob=put_blob(raw)
+    blob=put_blob(raw,name)
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
         row=c.execute('SELECT * FROM jobs WHERE id=?',(jid,)).fetchone();authorize_job(c,row,user,'operate')
@@ -606,7 +628,7 @@ async def manual_resolution(jid: str,item_id: str,request: Request,name: str,use
 
 @app.get('/v1/capabilities')
 def capabilities(user=Depends(identity)):
-    return {'manual_import':['pdf','txt'],'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'public_sei_process_pages':True,'public_sei_document_discovery':True,'portal_search':False,'direct_download_formats':['pdf','txt'],'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_srs':['EPSG:4326'],'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':False,'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.5.0'}
+    return {'manual_import':['pdf','txt','csv','docx','xlsx'],'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'public_sei_process_pages':True,'public_sei_document_discovery':True,'portal_search':False,'direct_download_formats':['pdf','txt'],'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_formats':['kml','kmz','shp','shapefile_zip','geojson','json','gpx'],'spatial_srs':['EPSG:4326'],'process_analysis_dashboard':True,'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':False,'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.5.0'}
 
 @app.get('/v1/me')
 def me(user=Depends(identity)):
@@ -631,7 +653,7 @@ def manus_routes():
 
 @app.get('/assets/{name}')
 def assets(name: str):
-    allowed={'ui.js': 'text/javascript', 'advanced_ui.js': 'text/javascript', 'public_sei_ui.js': 'text/javascript', 'styles.css': 'text/css', 'group-arqueo-logo.png': 'image/png'}
+    allowed={'ui.js': 'text/javascript', 'advanced_ui.js': 'text/javascript', 'public_sei_ui.js': 'text/javascript', 'analysis_ui.js': 'text/javascript', 'styles.css': 'text/css', 'group-arqueo-logo.png': 'image/png'}
     if name not in allowed: raise HTTPException(404)
     return FileResponse(Path(__file__).with_name(name),media_type=allowed[name])
 

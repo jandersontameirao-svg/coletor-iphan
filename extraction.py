@@ -9,7 +9,7 @@ import time
 from fastapi import HTTPException
 
 TOOL='native-text'
-VERSION='pypdf-6.10.0/utf8-v2'
+VERSION='pypdf-6.10.0/utf8-v3-formats-ocr'
 TIME_LIMIT=35
 MEMORY_BYTES=512*1024*1024
 CPU_SECONDS=30

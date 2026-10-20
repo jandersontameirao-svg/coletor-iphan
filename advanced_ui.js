@@ -32,17 +32,17 @@ views.knowledge=async root=>{
 };
 
 views.spatial=async root=>{
-  root.append(node('p','Importe KML/KMZ para criar uma revisão geográfica versionada. As consultas usam WGS84 e distância geodésica em metros; graus nunca são tratados como metros.'));
+  root.append(node('p','Importe KML/KMZ, Shapefile ZIP, GeoJSON/JSON ou GPX para criar uma revisão geográfica versionada. As consultas usam WGS84 e distância geodésica em metros; graus nunca são tratados como metros. PDF continua sendo importado como documento do processo.'));
   if(!state.pid){root.append(node('p','Selecione um processo para importar e consultar recursos espaciais.','empty'));return}
   const resources=await api('/v1/spatial-resources?process_id='+encodeURIComponent(state.pid));
   const list=panel('Recursos espaciais');
-  if(!resources.length) list.append(node('p','Nenhum recurso KML/KMZ registrado.','empty'));
+  if(!resources.length) list.append(node('p','Nenhum recurso geográfico registrado.','empty'));
   for(const r of resources){const row=node('div',undefined,'item');row.append(node('h3',r.name),node('small',`${r.source_filename} · ${r.feature_count} feições · versão ${r.version}`,'subtle'),button('Abrir recurso',async()=>detail('Recurso espacial',await api('/v1/spatial-resources/'+r.id))));list.append(row)}
   root.append(list);
   if(can('operate')){
-    const imp=panel('Importar KML/KMZ');
+    const imp=panel('Importar recurso geográfico');
     const f=form(imp,'Importar recurso',async data=>{const file=data.get('file');await api(`/v1/spatial-resources?process_id=${encodeURIComponent(state.pid)}&name=${encodeURIComponent(data.get('name')||file.name)}&filename=${encodeURIComponent(file.name)}`,'POST',file);notify('Recurso espacial importado como revisão 1');await navigate('spatial')});
-    field(f.f,'Nome do recurso','name');field(f.f,'Arquivo KML ou KMZ','file','file').accept='.kml,.kmz';f.finish();root.append(imp);
+    field(f.f,'Nome do recurso','name');field(f.f,'Arquivo KML, KMZ, Shapefile ZIP, GeoJSON, JSON ou GPX','file','file').accept='.kml,.kmz,.zip,.shp,.geojson,.json,.gpx';f.finish();root.append(imp);
   }
   const query=panel('Consultar por ponto e entorno');
   const q=form(query,'Pesquisar feições',async data=>{const result=await api('/v1/spatial-search','POST',{process_id:state.pid,latitude:Number(data.get('latitude')),longitude:Number(data.get('longitude')),radius_m:Number(data.get('radius_m')||0)});detail('Resultados espaciais',result)});
@@ -57,7 +57,7 @@ views.integrations=async root=>{
   const link=node('a','Abrir contrato OpenAPI');link.href='/openapi.json';link.target='_blank';link.rel='noopener';contract.append(link);
   root.append(contract);
   const available=panel('Capacidades do escopo 0.5');
-  for(const text of ['Afirmações vinculadas a evidência: disponível','Validação humana e conflitos: disponível','Importação KML/KMZ WGS84: disponível','Consulta por entorno em metros: disponível','Descoberta em páginas públicas SEI fornecidas: disponível','Pesquisa por número, login e CAPTCHA: não disponível','Homologação externa IPHAN/ATENA/Geoportal: pendente']) available.append(node('p',text));
+  for(const text of ['Afirmações vinculadas a evidência: disponível','Validação humana e conflitos: disponível','Importação KML/KMZ, Shapefile, GeoJSON/JSON e GPX em WGS84: disponível','Importação de PDF, TXT, CSV, DOCX e XLSX: disponível','OCR de PDF digitalizado: condicional ao motor instalado','Consulta por entorno em metros: disponível','Descoberta em páginas públicas SEI fornecidas: disponível','Pesquisa por número, login e CAPTCHA: não disponível','Homologação externa IPHAN/ATENA/Geoportal: pendente']) available.append(node('p',text));
   root.append(available);
 };
 

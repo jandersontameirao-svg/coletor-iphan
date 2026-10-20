@@ -6,7 +6,7 @@ Entregar e publicar a versão 0.5 do Coletor IPHAN como repositório técnico ra
 
 ## Escopo implementado
 
-A fundação preserva processos canônicos, ACL por processo, grupos, contas de serviço, delegações e auditoria. Originais PDF/TXT são guardados por SHA-256 com revisões, ocorrências, proveniência, download protegido e extração assíncrona. Conhecimento só pode ser registrado mediante evidência autorizada e passa por revisão humana. Recursos espaciais KML/KMZ são versionados em WGS84 e consultados por ponto e entorno em metros.
+A fundação preserva processos canônicos, ACL por processo, grupos, contas de serviço, delegações e auditoria. Originais PDF/TXT são guardados por SHA-256 com revisões, ocorrências, proveniência, download protegido e extração assíncrona. Conhecimento só pode ser registrado mediante evidência autorizada e passa por revisão humana. Recursos espaciais KML/KMZ, Shapefile ZIP, GeoJSON/JSON e GPX são versionados em WGS84 e consultados por ponto e entorno em metros; PDF permanece no fluxo documental.
 
 A versão 0.5 adiciona descoberta de documentos em páginas públicas do SEI/IPHAN fornecidas explicitamente pelo usuário. Ela reconhece apenas o endpoint público de processo, registra número/título do processo e os documentos exibidos na tabela, e acessa somente os links públicos de documentos que a própria página apresenta. Processos são criados ou reutilizados canonicamente para o solicitante humano; uma associação manual a processo divergente é recusada. Cada documento guarda a URL pública, o identificador exibido, título, datas, unidade e resultado individual.
 

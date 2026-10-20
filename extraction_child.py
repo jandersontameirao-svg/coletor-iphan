@@ -26,8 +26,21 @@ def main():
             text=page.extract_text() or '';total+=len(text)
             if total>2000000: raise ValueError('text_limit')
             pages.append([index+1,text])
+        if any(not text.strip() for _,text in pages):
+            try:
+                import ocr_optional
+                if ocr_optional.capability()['available']:
+                    ocr_pages=dict(ocr_optional.extract_pdf(path, timeout=25))
+                    pages=[[page, text if text.strip() else ocr_pages.get(page, '')] for page,text in pages]
+            except Exception:
+                # A PDF sem camada textual continua explicitamente needs_ocr.
+                pass
     else:
-        text=raw.decode('utf-8')
+        if mime=='text/plain':
+            text=raw.decode('utf-8')
+        else:
+            from document_extractors import extract
+            text=extract(raw,mime)
         if not text.strip(): raise ValueError('empty_text')
         if len(text)>2000000: raise ValueError('text_limit')
         pages=[[None,text]]

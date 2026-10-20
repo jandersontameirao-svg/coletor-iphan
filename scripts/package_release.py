@@ -25,7 +25,7 @@ for path in sorted(root.rglob('*')):
 entries['LEIA_PRIMEIRO.txt']='''COLETOR IPHAN 0.5 — PACOTE REVISÁVEL
 Comece por coletor-iphan/README.md e docs/release-0.5.md.
 Especificação original e decisão de links: docs/specification/.
-A base 0.3 foi preservada; as expansões adicionam conhecimento rastreável, geografia KML/KMZ e descoberta em páginas públicas SEI fornecidas.
+A base 0.3 foi preservada; as expansões adicionam conhecimento rastreável, análise de processos, geografia KML/KMZ/Shapefile/GeoJSON/GPX, formatos documentais e descoberta em páginas públicas SEI fornecidas.
 Afirmações exigem evidência e validação humana; nenhum fato é gerado automaticamente.
 Recursos espaciais são versionados em WGS84 e consultas usam metros geodésicos.
 O parser SEI só lê páginas públicas fornecidas e links públicos que elas apresentam; não pesquisa processos por número, não faz login e não resolve CAPTCHA.

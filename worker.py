@@ -189,9 +189,9 @@ def _download_document(job, item, user, keeper):
             total = c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')", (job["id"],)).fetchone()[0]
         if total + len(data["data"]) > BATCH_QUOTA_BYTES:
             raise safe_fetch.FetchError("batch_quota", "Limite de 100 MiB por tarefa; divida a lista")
-        blob = app.put_blob(data["data"])
         metadata = _metadata(item)
         name = sei_public.document_filename(metadata, data) if item.get("kind") == "sei_document" else data["name"]
+        blob = app.put_blob(data["data"], name)
         original_name = item.get("display_name") or data.get("original_name", data["name"])
         with app.db() as c:
             c.execute("BEGIN IMMEDIATE")
