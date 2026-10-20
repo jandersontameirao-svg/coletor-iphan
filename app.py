@@ -1,5 +1,5 @@
 """Coletor IPHAN: fundação local; capacidades externas não homologadas."""
-import hashlib, io, json, os, secrets, sqlite3, time, uuid
+import hashlib, io, json, os, secrets, sqlite3, threading, time, uuid
 from pathlib import Path
 from contextlib import contextmanager
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -15,15 +15,18 @@ import knowledge_domain
 import geo_domain
 import ocr_optional
 import demo_mode
+import sei_domain
+import sei_public
 from pypdf import PdfReader
 
 ROOT = Path(os.getenv('COLLECTOR_DATA', './data')).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
 (ROOT / 'blobs').mkdir(exist_ok=True)
 DB = ROOT / 'catalog.sqlite'
-app = FastAPI(title='Coletor IPHAN — fundação local', version='0.4.0')
+app = FastAPI(title='Coletor IPHAN — fundação local', version='0.5.0')
 DEMO_MODE = os.getenv('COLLECTOR_DEMO_MODE', '').lower() in ('1', 'true', 'yes')
 ALLOW_EMBED = os.getenv('COLLECTOR_ALLOW_EMBED', '').lower() in ('1', 'true', 'yes')
+EMBEDDED_WORKER = os.getenv('COLLECTOR_EMBEDDED_WORKER', '').lower() in ('1', 'true', 'yes')
 
 def uid(): return str(uuid.uuid4())
 @contextmanager
@@ -54,6 +57,7 @@ task_queue.migrate(db)
 repository_migration.migrate(db)
 knowledge_domain.migrate(db)
 geo_domain.migrate(db)
+sei_domain.migrate(db)
 
 def password_hash(password, salt=None):
     salt = salt or secrets.token_hex(16)
@@ -92,6 +96,33 @@ def platform_admin(user):
 
 def process_access(c,process_id,user,permission='read'):
     return authorization.process_access(c,process_id,user,permission)
+
+
+def ensure_discovered_process(c,number,title,user):
+    """Cria somente para usuário humano o processo declarado em uma página pública SEI."""
+    if user.get('_delegation') or user.get('kind','human')!='human':
+        raise HTTPException(403,'Descoberta sem processo exige usuário humano sem delegação')
+    number=''.join(number.split())
+    key=repository_migration.number_key(number)
+    if not key:
+        raise HTTPException(422,'Número do processo público inválido')
+    current=c.execute("SELECT process_id FROM process_registry WHERE domain='central' AND number_key=?",(key,)).fetchone()
+    if current:
+        return process_access(c,current['process_id'],user,'operate')['id']
+    pid=uid()
+    title=(title or 'Processo público SEI/IPHAN').strip()[:300]
+    folder=f'{number} — {title}'
+    try:
+        c.execute('INSERT INTO processes(id,owner,number,title,folder,domain,number_key) VALUES(?,?,?,?,?,?,?)',(pid,user['id'],number,title,folder,'central',key))
+        c.execute("INSERT INTO process_registry VALUES('central',?,?)",(key,pid))
+        c.execute('INSERT INTO resource_grants VALUES(?,?,?,?,?,?,?)',(uid(),pid,'user',user['id'],'admin',1,time.time()))
+    except sqlite3.IntegrityError:
+        current=c.execute("SELECT process_id FROM process_registry WHERE domain='central' AND number_key=?",(key,)).fetchone()
+        if not current:
+            raise
+        return process_access(c,current['process_id'],user,'operate')['id']
+    event(c,user.get('_actor_id',user['id']),'process.discovered_from_public_page',pid)
+    return pid
 
 class Login(BaseModel):
     name: str
@@ -438,7 +469,8 @@ def job(body: JobInput,request: Request,user=Depends(identity)):
                         except safe_fetch.FetchError as exc: status='invalid';detail=exc.code+': '+exc.action
                     duplicate=seen.get(url)
                     if status=='received' and duplicate: status='duplicate_pending';detail='Link repetido nesta lista; resultado será reutilizado'
-                    c.execute('INSERT INTO link_items VALUES(?,?,?,?,?,?,?,?,?,?)',(item_id,jid,index,url,status,detail,body.input.get('process_id'),None,duplicate,time.time()))
+                    kind=sei_public.input_kind(url) if status=='received' else 'direct_document'
+                    c.execute('INSERT INTO link_items(id,job_id,position,url,status,detail,process_id,revision_id,duplicate_of,created,kind,parent_item_id,display_name,metadata) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(item_id,jid,index,url,status,detail,body.input.get('process_id'),None,duplicate,time.time(),kind,None,'','{}'))
                     seen.setdefault(url,item_id)
                 event(c,user.get('_actor_id',user['id']),'collection.queued',jid)
         c.execute('INSERT OR IGNORE INTO idempotency_requests VALUES(?,?,?,?)',(user['id'],key,payload,jid))
@@ -574,7 +606,7 @@ async def manual_resolution(jid: str,item_id: str,request: Request,name: str,use
 
 @app.get('/v1/capabilities')
 def capabilities(user=Depends(identity)):
-    return {'manual_import':['pdf','txt'],'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'portal_search':False,'direct_download_formats':['pdf','txt'],'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_srs':['EPSG:4326'],'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':False,'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.4.0'}
+    return {'manual_import':['pdf','txt'],'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'public_sei_process_pages':True,'public_sei_document_discovery':True,'portal_search':False,'direct_download_formats':['pdf','txt'],'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_srs':['EPSG:4326'],'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':False,'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.5.0'}
 
 @app.get('/v1/me')
 def me(user=Depends(identity)):
@@ -583,13 +615,13 @@ def me(user=Depends(identity)):
 
 @app.get('/_app/health')
 def health():
-    return {'status':'ok','version':'0.4.0','demo_mode':DEMO_MODE}
+    return {'status':'ok','version':'0.5.0','demo_mode':DEMO_MODE,'embedded_worker':EMBEDDED_WORKER}
 
 
 @app.post('/v1/demo-session')
 def demo_session():
     if not DEMO_MODE: raise HTTPException(404,'Demonstração não habilitada')
-    return {'access_token':demo_mode.issue_session(db),'mode':'read_only','notice':'Sessão de visualização com dados sintéticos; alterações não estão habilitadas.'}
+    return {'access_token':demo_mode.issue_session(db),'mode':'construction','notice':'Sessão de construção com dados efêmeros; somente descoberta pública SEI está habilitada.'}
 
 
 @app.get('/manus-routes.json')
@@ -599,15 +631,16 @@ def manus_routes():
 
 @app.get('/assets/{name}')
 def assets(name: str):
-    allowed={'ui.js': 'text/javascript', 'advanced_ui.js': 'text/javascript', 'styles.css': 'text/css', 'group-arqueo-logo.png': 'image/png'}
+    allowed={'ui.js': 'text/javascript', 'advanced_ui.js': 'text/javascript', 'public_sei_ui.js': 'text/javascript', 'styles.css': 'text/css', 'group-arqueo-logo.png': 'image/png'}
     if name not in allowed: raise HTTPException(404)
     return FileResponse(Path(__file__).with_name(name),media_type=allowed[name])
 
 
 @app.middleware('http')
 async def demo_read_only(request: Request,call_next):
-    """O token público do modo demonstrativo nunca autoriza escrita no acervo sintético."""
-    safe_demo_request=request.method in ('GET','HEAD','OPTIONS') or (request.method=='DELETE' and request.url.path=='/v1/sessions') or (request.method=='POST' and request.url.path in ('/v1/search','/v1/spatial-search'))
+    """A sessão pública de construção só pode iniciar/retomar coleta pública controlada."""
+    path=request.url.path
+    safe_demo_request=request.method in ('GET','HEAD','OPTIONS') or (request.method=='DELETE' and path=='/v1/sessions') or (request.method=='POST' and (path in ('/v1/search','/v1/spatial-search','/v1/collection-jobs') or (path.startswith('/v1/collection-jobs/') and path.endswith('/resume'))))
     if DEMO_MODE and not safe_demo_request:
         header=request.headers.get('Authorization','')
         if header.startswith('Bearer '):
@@ -617,6 +650,33 @@ async def demo_read_only(request: Request,call_next):
             if row and row['user_id']==demo_mode.DEMO_USER_ID:
                 return JSONResponse(status_code=403,content={'detail':'Demonstração pública disponível somente para leitura'})
     return await call_next(request)
+
+
+embedded_worker_stop=threading.Event()
+embedded_worker_thread=None
+
+@app.on_event('startup')
+def start_embedded_worker():
+    """Executa a fila somente em containers de construção explicitamente habilitados."""
+    global embedded_worker_thread
+    if not EMBEDDED_WORKER or embedded_worker_thread:
+        return
+    def loop():
+        import worker
+        worker_id='embedded-'+uid()
+        while not embedded_worker_stop.is_set():
+            try:
+                if not worker.run_once(worker_id):
+                    embedded_worker_stop.wait(0.5)
+            except Exception:
+                if embedded_worker_stop.wait(1):
+                    break
+    embedded_worker_thread=threading.Thread(target=loop,name='coletor-embedded-worker',daemon=True)
+    embedded_worker_thread.start()
+
+@app.on_event('shutdown')
+def stop_embedded_worker():
+    embedded_worker_stop.set()
 
 
 @app.middleware('http')
@@ -677,7 +737,7 @@ def documented_openapi():
                 operation.setdefault('parameters',[]).append({'name':'X-Delegation-Id','in':'header','required':False,'schema':{'type':'string'},'description':'Delegação vigente do usuário para a conta de serviço autenticada; não concede escopos extras.'})
     command=schema['paths']['/v1/collection-jobs']['post']
     command.setdefault('parameters',[]).append({'name':'Idempotency-Key','in':'header','required':True,'schema':{'type':'string','minLength':1,'maxLength':200},'description':'Mesma chave/parâmetros retorna o mesmo job; alteração retorna 409.'})
-    command['description']='Recebe links explícitos (1 a 50) ou solicita extração. 202 não confirma obtenção de documentos. Consulte status_url e /links; não há busca de processos por número.'
+    command['description']='Recebe de 1 a 50 links explícitos, incluindo páginas públicas SEI/IPHAN já fornecidas, ou solicita extração. A página SEI pode revelar apenas seus links de documentos públicos; não há pesquisa por número, login ou CAPTCHA. 202 não confirma obtenção. Consulte status_url e /links.'
     app.openapi_schema=schema
     return schema
 

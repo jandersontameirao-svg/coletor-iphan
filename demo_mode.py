@@ -15,9 +15,9 @@ DEMO_ASSERTION_ID = "demo-assertion-v04"
 
 
 def seed(db, root, password_hash, event):
-    """Cria somente registros sintéticos, de modo idempotente, para visualização pública."""
+    """Cria somente registros sintéticos, de modo idempotente, para construção pública."""
     content = (
-        "Registro sintético de demonstração do Coletor IPHAN 0.4. "
+        "Registro sintético de demonstração do Coletor IPHAN 0.5. "
         "Este conteúdo não representa processo, documento, coordenada ou parecer real."
     ).encode("utf-8")
     digest = hashlib.sha256(content).hexdigest()
@@ -126,7 +126,7 @@ def seed(db, root, password_hash, event):
 
 
 def issue_session(db):
-    """Emite token temporário apenas para o usuário sintético de leitura."""
+    """Emite token temporário para o usuário sintético de construção."""
     import secrets
 
     token = secrets.token_urlsafe(40)

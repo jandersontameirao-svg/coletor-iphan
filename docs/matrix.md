@@ -44,4 +44,13 @@ A especificação original continua vigente, com substituição da busca automá
 | Conhecimento/especialistas | Não operacional; métricas retornam null/planejado | UI distingue capacidade futura | overview/capabilities; release-0.3.md | F5 evidências/validação humana, agentes reais e consumidores |
 | Homologação/segurança/produção | Testes locais e pacote auditável | Suite/Chromium/instalação | validation-v0.3.txt | F6 completa, brute-force, isolamento, observabilidade, deploy |
 
+## Atualização 0.5 — descoberta em página pública SEI fornecida
+
+| Requisito | Implementação | Teste | Evidência | Pendência/bloqueio |
+|---|---|---|---|---|
+| Página pública SEI fornecida | Parser restrito a `sei.iphan.gov.br` e ao endpoint público de processo; lê número, metadados e tabela | `test_parser_extracts_only_public_document_links` | `sei-public-discovery-evidence-2026-10-19.md` | Sem pesquisa por número, paginação externa ou homologação institucional |
+| Documentos públicos da página | Somente URLs já exibidas para a consulta externa de documento viram itens filhos de coleta | `test_worker_registers_process_downloads_public_document_and_keeps_restricted_item_pending` | `release-0.5.md` | PDF/TXT continua sujeito a tipo, tamanho, hash, SSRF e quota |
+| Restrições e associação | Sem URL pública fica pendente; processo divergente não recebe documentos | `test_existing_process_with_another_number_stays_pending_without_document_download` | `release-0.5.md` | Importação manual ocorre somente em ambiente operacional autorizado |
+| Limites de descoberta | Até 1.000 documentos por página e 25.000 por tarefa, sem alterar 100 MiB/20 MiB existentes | `test_job_document_discovery_limit_keeps_parent_as_action_required` | `plan-sei-public-discovery.md` | Dividir a operação quando um limite for atingido |
+
 **Nenhuma integração externa está declarada homologada. F1 não está integralmente concluída conforme o aceite PostgreSQL da especificação original.**

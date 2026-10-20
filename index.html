@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Coletor IPHAN · Repositório técnico</title><link rel="stylesheet" href="/assets/styles.css"><script defer src="/assets/ui.js"></script><script defer src="/assets/advanced_ui.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Coletor IPHAN · Repositório técnico</title><link rel="stylesheet" href="/assets/styles.css"><script defer src="/assets/ui.js"></script><script defer src="/assets/advanced_ui.js"></script><script defer src="/assets/public_sei_ui.js"></script></head>
 <body>
 <header><div class="brand"><img class="group-logo" src="/assets/group-arqueo-logo.png" alt="Grupo Arqueo"><span class="symbol" aria-hidden="true">◈</span><div><strong>Coletor IPHAN</strong><small>Repositório técnico compartilhado</small></div></div><div id="session" hidden><span id="identity"></span><button id="logout" class="quiet">Sair</button></div></header>
-<section id="login-panel" class="login"><span class="eyebrow">{{LOGIN_LABEL}}</span><h1>Documentos, origem e evidências.</h1><p>{{LOGIN_MESSAGE}}</p><form id="login-form" {{CREDENTIAL_LOGIN_HIDDEN}}><label>Usuário<input name="name" autocomplete="username" required></label><label>Senha<input name="password" type="password" autocomplete="current-password" required></label><button>Entrar</button></form><div id="demo-access" class="demo-access" {{DEMO_ACCESS_HIDDEN}}><strong>Acesso público sem senha</strong><p>Os dados são exclusivamente sintéticos. A sessão é somente de leitura e não permite coleta externa ou alterações.</p><button id="demo-login" class="secondary" type="button">Entrar sem senha</button></div><small>{{LOGIN_FOOTER}}</small></section>
+<section id="login-panel" class="login"><span class="eyebrow">{{LOGIN_LABEL}}</span><h1>Documentos, origem e evidências.</h1><p>{{LOGIN_MESSAGE}}</p><form id="login-form" {{CREDENTIAL_LOGIN_HIDDEN}}><label>Usuário<input name="name" autocomplete="username" required></label><label>Senha<input name="password" type="password" autocomplete="current-password" required></label><button>Entrar</button></form><div id="demo-access" class="demo-access" {{DEMO_ACCESS_HIDDEN}}><strong>Acesso público sem senha</strong><p>Os dados iniciais são sintéticos. A construção permite somente a leitura de páginas públicas SEI fornecidas e a coleta de documentos que elas exponham publicamente.</p><button id="demo-login" class="secondary" type="button">Entrar sem senha</button></div><small>{{LOGIN_FOOTER}}</small></section>
 <div id="application" hidden>
 <nav id="navigation" aria-label="Navegação principal"></nav>
 <div class="toolbar"><form id="search-form"><input name="text" placeholder="Pesquisar texto nas evidências autorizadas" aria-label="Pesquisar evidências" required maxlength="500"><button class="secondary">Pesquisar</button></form><button id="reload" class="secondary">Atualizar</button></div>
@@ -11,5 +11,5 @@
 </div>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <dialog id="detail-dialog"><button id="close-dialog" class="quiet">Fechar</button><h2 id="dialog-title">Detalhes</h2><pre id="dialog-content"></pre></dialog>
-<footer>Coletor 0.4 · Grupo Arqueo · Links, documentos, evidências, conhecimento e geografia permanecem etapas rastreáveis.</footer>
+<footer>Coletor 0.5 · Grupo Arqueo · Processos públicos SEI, links, documentos, evidências, conhecimento e geografia permanecem etapas rastreáveis.</footer>
 </body></html>

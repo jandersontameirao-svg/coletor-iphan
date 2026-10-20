@@ -1,8 +1,8 @@
-# Coletor IPHAN — versão 0.4.0
+# Coletor IPHAN — versão 0.5.0
 
-Continuação da base 0.2, preservando seus quatro arquivos com 22 testes byte a byte. Nesta entrega: processo canônico compartilhado, ACLs por recurso, grupos, contas de serviço/delegação, entrada por link/lista, download direto protegido, resolução manual, extração isolada/versionada, conhecimento rastreável e geografia KML/KMZ. **Registro de tarefa não comprova obtenção de documento. Coleta de processo/anexos IPHAN e integração ATENA real não estão homologadas.**
+Continuação da base 0.2, preservando seus quatro arquivos com 22 testes byte a byte. Nesta entrega: processo canônico compartilhado, ACLs por recurso, grupos, contas de serviço/delegação, entrada por link/lista, descoberta em páginas públicas SEI fornecidas, download direto protegido, resolução manual, extração isolada/versionada, conhecimento rastreável e geografia KML/KMZ. **Registro de tarefa não comprova obtenção de documento. A leitura pública SEI não representa homologação institucional com IPHAN ou integração ATENA real.**
 
-A especificação original está em `docs/specification/original.txt`; a decisão atual de entrada exclusivamente por links está em `docs/specification/scope-2026-10-15.txt`. Não há busca automática de processos por número ou consulta ao portal. Número continua necessário para cadastrar a identidade de um processo no catálogo.
+A especificação original está em `docs/specification/original.txt`; a decisão atual de entrada por links fornecidos está em `docs/specification/scope-2026-10-15.txt`. Não há busca automática de processos por número. Uma página pública SEI/IPHAN já fornecida pode ser lida uma vez para identificar somente os documentos que ela própria expõe por link público.
 
 ## Instalação local
 
@@ -22,7 +22,7 @@ Bootstrap solicita administrador/senha sem ecoar a senha; mínimo 12 caracteres 
 python worker.py
 ```
 
-Abra http://127.0.0.1:8000. As telas são visão geral, entrada de links, tarefas, processos, documentos/revisões, biblioteca, integrações e administração. Seleção de processo e filtro da biblioteca persistem durante a sessão. API/OpenAPI em `/openapi.json`, documentação interativa em `/docs`. O snapshot do contrato acompanha a entrega em `docs/openapi.json`. Quando `COLLECTOR_DEMO_MODE=1`, a interface abre automaticamente a sessão sintética sem senha e permanece somente de leitura; fora desse modo, o login continua obrigatório.
+Abra http://127.0.0.1:8000. As telas são visão geral, entrada de links, tarefas, processos, documentos/revisões, biblioteca, integrações e administração. Seleção de processo e filtro da biblioteca persistem durante a sessão. API/OpenAPI em `/openapi.json`, documentação interativa em `/docs`. O snapshot do contrato acompanha a entrega em `docs/openapi.json`. Quando `COLLECTOR_DEMO_MODE=1`, a interface abre automaticamente a sessão sintética sem senha. Com `COLLECTOR_EMBEDDED_WORKER=1`, essa sessão somente pode iniciar/retomar a descoberta pública SEI; fora desse modo, o login continua obrigatório.
 
 O lock inclui dependências transitivas de runtime e testes HTTP, com hashes de wheels para este ambiente. Instalação em venv nova foi realizada com os wheels previamente baixados, sem acesso ao índice durante a instalação. O ambiente de construção usou Python 3.12.14, Chromium 154.0.8037.57 e Playwright 1.62.0. Wheels não acompanham o ZIP; instalação a partir do índice depende de conectividade. Não confundir isso com uma imagem Docker ou homologação de implantação.
 
@@ -47,7 +47,7 @@ Bytes canônicos em `data/blobs/<sha256>`; pastas são lógicas no catálogo. A-
 
 `POST /v1/collection-jobs` aceita `input.url` ou `input.urls`, de 1 a 50 itens, e `process_id` opcional. Cada item tem validação e estado próprios. Comando limitado a 256 KiB e até 100 tarefas pendentes por solicitante. Resposta 202 com `job_id`/`status_url` significa **recebimento**. Consulte `/links` para resultados individuais.
 
-Sem processo associado, o worker pede cadastro/seleção pela retomada antes de acessar a origem. Com processo autorizado, somente os links explícitos são acessados. Caminho implementado: download direto de PDF ou texto UTF-8 público; não há descoberta automática de anexos, navegação de páginas SEI, busca por número, paginação de processos ou automação de login.
+Sem processo associado, um link direto de documento pede cadastro/seleção pela retomada antes de acessar a origem. Uma página SEI pública fornecida pode criar/reutilizar o processo canônico declarado nela e registrar seus documentos filhos. Caminhos implementados: download direto de PDF ou texto UTF-8 público e leitura única de `md_pesq_processo_exibir.php` em `sei.iphan.gov.br`, com descoberta exclusiva de URLs `md_pesq_documento_consulta_externa.php` mostradas na tabela. Não há busca por número, paginação externa, automação de login ou resolução de CAPTCHA.
 
 SSRF: HTTPS/443, allowlist exata configurável, sem credenciais/fragmentos, resolução DNS com prazo de cinco segundos, rejeição de endereços não globais/transição IPv6, IP fixado na conexão e SNI/certificado do hostname original. Cada redirect é validado/resolvido novamente; máximo cinco. Proxy HTTPS herdado é mantido, com CONNECT ao IP validado; recusa pelo proxy vira pendência, sem fallback que contorne a política. TLS permanece verificado. Limites: 20 MiB por documento, 100 MiB de originais confirmados por tarefa, timeout de conexão/leitura, cadência mínima de 0,2 segundo entre itens. Não há varredura do portal.
 
@@ -71,7 +71,7 @@ Lease de 120 segundos renovado periodicamente por heartbeat; exclusividade/fenci
 python scripts/run_tests.py
 ```
 
-O runner usa base temporária. Os 22 testes originais foram preservados e passaram antes/depois das alterações; hashes em `docs/original-test-preservation.json`. Suite expandida: 65 testes. Com ambiente browser completo, todos passaram; na venv nova sem Playwright, 64 passaram e o E2E foi explicitamente ignorado. Para o E2E:
+O runner usa base temporária. Os 22 testes originais foram preservados e passaram antes/depois das alterações; hashes em `docs/original-test-preservation.json`. Suite expandida: 73 testes aprovados em 19/10/2026. Para o E2E:
 
 ```sh
 pip install -r requirements-browser.txt
@@ -100,9 +100,9 @@ python reference_client.py --revision-id ID_DA_REVISAO
 python reference_client.py --links-file links.txt --process-id ID_DO_PROCESSO
 ```
 
-Verificação externa é separada: `python scripts/verify_external.py --url LINK_AUTORIZADO`. Em 15/10, a pesquisa pública do SEI devolveu HTML com indicadores de barreira em uma tentativa e timeout DNS em outra. Nenhum documento de processo foi obtido nessa homologação; ATENA OS real não foi acessada. Detalhes em `docs/iphan-verification.md`.
+Verificação externa é separada: `python scripts/verify_external.py --url LINK_AUTORIZADO`. Em 19/10, uma página pública de processo fornecida pelo usuário exibiu a tabela de documentos e links públicos diretos que responderam PDF. Isso valida a estrutura de leitura, mas não equivale a homologação institucional; ATENA OS real não foi acessada. Detalhes em `docs/sei-public-discovery-evidence-2026-10-19.md`.
 
-F1 avançou, mas o aceite integral da especificação original ainda depende de PostgreSQL/PostGIS em servidor real e demais requisitos. OCR efetivo, outros formatos, especialistas, organizações/múltiplos domínios, vínculos temporais de projeto, transporte/consumidores da outbox, CI/Compose, retenção, hardening e homologação externa seguem pendentes. A base auditada antiga ATENA e seus achados A01–A15 continuam indisponíveis; o pacote 0.2 utilizado aqui é a base independente já criada. A publicação demonstrativa não equivale a implantação operacional. Ver relatório de corrigido/testado/pendente/bloqueado em `docs/release-0.4.md` e matriz em `docs/matrix.md`.
+F1 avançou, mas o aceite integral da especificação original ainda depende de PostgreSQL/PostGIS em servidor real e demais requisitos. OCR efetivo, outros formatos, especialistas, organizações/múltiplos domínios, vínculos temporais de projeto, transporte/consumidores da outbox, CI/Compose, retenção, hardening e homologação externa seguem pendentes. A base auditada antiga ATENA e seus achados A01–A15 continuam indisponíveis; o pacote 0.2 utilizado aqui é a base independente já criada. A publicação demonstrativa não equivale a implantação operacional. Ver relatório de corrigido/testado/pendente/bloqueado em `docs/release-0.5.md` e matriz em `docs/matrix.md`.
 
 ## Extensão 0.4 no escopo real do Coletor
 

@@ -52,12 +52,12 @@ views.spatial=async root=>{
 views.integrations=async root=>{
   const data=await api('/v1/integration/capabilities');
   const contract=panel('Contratos do Coletor IPHAN');
-  contract.append(node('p','A API continua recebendo somente links explícitos e preserva autenticação, Idempotency-Key, ACL e fila persistente. Consumidores devem reutilizar IDs de processo, revisão, evidência e recurso espacial.'));
+  contract.append(node('p','A API recebe links explícitos de documentos e páginas públicas SEI fornecidas, preservando autenticação, Idempotency-Key, ACL e fila persistente. Consumidores devem reutilizar IDs de processo, revisão, evidência e recurso espacial.'));
   contract.append(node('p',`Versão do contrato: ${data.version} · cliente externo homologado: não · Geoportal real homologado: não.`));
   const link=node('a','Abrir contrato OpenAPI');link.href='/openapi.json';link.target='_blank';link.rel='noopener';contract.append(link);
   root.append(contract);
-  const available=panel('Capacidades do escopo 0.4');
-  for(const text of ['Afirmações vinculadas a evidência: disponível','Validação humana e conflitos: disponível','Importação KML/KMZ WGS84: disponível','Consulta por entorno em metros: disponível','Busca automática de processos/anexos: não disponível','Homologação externa IPHAN/ATENA/Geoportal: pendente']) available.append(node('p',text));
+  const available=panel('Capacidades do escopo 0.5');
+  for(const text of ['Afirmações vinculadas a evidência: disponível','Validação humana e conflitos: disponível','Importação KML/KMZ WGS84: disponível','Consulta por entorno em metros: disponível','Descoberta em páginas públicas SEI fornecidas: disponível','Pesquisa por número, login e CAPTCHA: não disponível','Homologação externa IPHAN/ATENA/Geoportal: pendente']) available.append(node('p',text));
   root.append(available);
 };
 

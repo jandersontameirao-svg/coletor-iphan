@@ -1,0 +1,8 @@
+{
+  "include": ["."],
+  "exclude": [".git", "__pycache__", ".venv"],
+  "extraPaths": ["."],
+  "executionEnvironments": [
+    {"root": ".", "extraPaths": ["."]}
+  ]
+}

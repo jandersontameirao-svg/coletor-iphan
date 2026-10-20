@@ -1,0 +1,9 @@
+ADENDO DE ESCOPO — 19/10/2026
+
+A entrada continua recebendo exclusivamente link ou lista de links fornecidos pela interface ou por consumidor autorizado. Não há pesquisa automática de processos por número, paginação externa, varredura do portal ou descoberta iniciada sem URL fornecida.
+
+Como exceção controlada para o host sei.iphan.gov.br, um link fornecido para a página pública md_pesq_processo_exibir.php pode ser lido uma vez. O aplicativo extrai somente os links de documento md_pesq_documento_consulta_externa.php que a própria tabela expõe publicamente. A página, o processo declarado e cada resultado permanecem rastreáveis.
+
+Não enviar CAPTCHA, não gerar o PDF da página, não fazer login, não usar credenciais externas, não preencher formulários, não acessar documentos sem link público e não contornar restrições. Linhas sem link público são pendências para ação autorizada.
+
+Limites: até 50 URLs por tarefa de origem, 1.000 documentos por página, 25.000 documentos descobertos por tarefa, 100 MiB de originais confirmados por tarefa e 20 MiB por arquivo. A entrada visual pode dividir uma lista maior em tarefas independentes de até 50 URLs.
