@@ -23,7 +23,7 @@
 ## Entrega atual
 
 - [x] Executar os testes específicos da descoberta pública, sintaxe, leitura real de uma página fornecida e regressão integral em banco temporário.
-- [ ] Salvar o checkpoint atualizado no repositório canônico Manus sem incluir arquivos de rascunho não ativados.
+- [x] Salvar o checkpoint atualizado no repositório canônico Manus sem incluir arquivos de rascunho não ativados: `b80c03424e347fc68c173046901b59b0712eade1`.
 - [ ] Publicar o checkpoint confirmado no ambiente Manus.
 
 ## Limites explícitos

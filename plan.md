@@ -1,37 +1,36 @@
-# Plano de entrega — Coletor IPHAN 0.4
+# Plano de entrega — Coletor IPHAN 0.5
 
 ## Objetivo
 
-Entregar e publicar a versão 0.4 do Coletor IPHAN como repositório técnico rastreável para processos, documentos, evidências, conhecimento e geografia. O produto não possui módulos financeiros, comerciais, de empresas, contratos, fluxo de caixa, DRE ou EBITDA. Esses temas não fazem parte desta entrega e não serão adicionados ao aplicativo.
+Entregar e publicar a versão 0.5 do Coletor IPHAN como repositório técnico rastreável de processos, documentos, evidências, conhecimento e geografia. O produto não possui módulos financeiros, comerciais, de empresas, contratos, fluxo de caixa, DRE ou EBITDA. Esses temas não pertencem ao aplicativo nem a esta entrega.
 
 ## Escopo implementado
 
-A fundação do Coletor mantém cadastro de processos canônicos, permissões por processo, grupos, contas de serviço, delegações e auditoria. Documentos PDF/TXT são preservados por hash SHA-256, com revisões, ocorrências, origem, download protegido e extração assíncrona. A entrada externa é feita somente por links explícitos ou importação manual autorizada; o sistema não busca processos, anexos ou páginas automaticamente no IPHAN.
+A fundação preserva processos canônicos, ACL por processo, grupos, contas de serviço, delegações e auditoria. Originais PDF/TXT são guardados por SHA-256 com revisões, ocorrências, proveniência, download protegido e extração assíncrona. Conhecimento só pode ser registrado mediante evidência autorizada e passa por revisão humana. Recursos espaciais KML/KMZ são versionados em WGS84 e consultados por ponto e entorno em metros.
 
-A versão 0.4 acrescenta uma camada de conhecimento rastreável. Cada afirmação exige uma evidência existente e autorizada e pode receber tipo, confiança, revisão humana, validação, rejeição, conflito e relações com outras afirmações. O sistema não gera fatos automaticamente.
+A versão 0.5 adiciona descoberta de documentos em páginas públicas do SEI/IPHAN fornecidas explicitamente pelo usuário. Ela reconhece apenas o endpoint público de processo, registra número/título do processo e os documentos exibidos na tabela, e acessa somente os links públicos de documentos que a própria página apresenta. Processos são criados ou reutilizados canonicamente para o solicitante humano; uma associação manual a processo divergente é recusada. Cada documento guarda a URL pública, o identificador exibido, título, datas, unidade e resultado individual.
 
-A mesma versão adiciona recursos espaciais em KML/KMZ. Os recursos são validados em WGS84/EPSG:4326, recebem revisões e podem ser consultados por latitude, longitude e entorno em metros usando distância geodésica. O vínculo espacial não substitui nem duplica os documentos do acervo.
+Documentos sem link público ou sinalizados como restritos não recebem requisição: ficam pendentes para solução autorizada. Respostas de login, CAPTCHA, HTML, restrição, redirecionamento indevido, erro ou formato não permitido também permanecem pendentes. O aplicativo não pesquisa processos por número, não preenche formulários, não autentica em sistemas externos, não resolve CAPTCHA e não tenta contornar controles de acesso.
 
-O OCR é condicional: quando o motor não existe, um PDF digitalizado é indicado como `needs_ocr`, sem criação de evidência vazia ou fictícia. As integrações com IPHAN, ATENA e Geoportal não são declaradas homologadas. Login, CAPTCHA, descoberta automática e coleta de anexos permanecem fora do escopo por segurança e proveniência.
+A entrada limpa cabeçalhos e textos não URL, remove duplicatas e divide listas com mais de 50 URLs em tarefas de até 50 itens. A descoberta limita 1.000 documentos por página e 25.000 por tarefa. O limite de 100 MiB de originais confirmados por tarefa, 20 MiB por arquivo, TLS validado, DNS público fixado, allowlist, SNI, redirects validados e cadência mínima permanecem ativos.
 
 ## Interface e identidade visual
 
-A interface é uma aplicação FastAPI servida pelo próprio backend, com telas para Visão geral, Entrada de links, Tarefas, Processos, Documentos, Biblioteca, Integrações, Administração, Conhecimento e Pesquisa espacial. Ela usa a marca local do Grupo Arqueo e uma linguagem técnica, objetiva e transparente. O cabeçalho, as cores institucionais e os avisos de capacidade foram mantidos como referência visual do Grupo Arqueo, sem transformar o Coletor em outro produto.
+A interface FastAPI servida pelo backend tem telas para Visão geral, Entrada de links, Tarefas, Processos, Documentos, Biblioteca, Integrações, Administração, Conhecimento e Pesquisa espacial. A camada de entrada diferencia links diretos de páginas públicas SEI, exibe a origem do processo e o status de cada documento descoberto. Mantém a identidade local do Grupo Arqueo, linguagem técnica e indicações transparentes de capacidade.
 
 ## Demonstração e publicação
 
-O modo demonstrativo usa somente registros sintéticos: processo, documento, evidência, afirmação e área espacial. A sessão pública é estritamente de leitura. Escrita, importação, coleta, edição de permissões, criação de usuários e administração são bloqueadas. O container responde em `/_app/health`, atende a porta `PORT` e permite Preview incorporado quando habilitado apenas para o runtime Webdev.
+O modo de construção abre sem senha e usa dados efêmeros. Ele permite somente a criação/retomada da fila de descoberta pública SEI e a coleta de documentos publicamente expostos. Criação de usuários, grupos, permissões, contas de serviço, uploads, importações, edição, exclusão, classificação, login externo e administração continuam bloqueados. O worker é habilitado apenas por variável explícita neste ambiente de construção.
 
-A publicação é feita no ambiente Manus por Dockerfile Python 3.12. O banco SQLite do container é efêmero e o worker não é iniciado na demonstração; portanto, a publicação é adequada para avaliação funcional e visual, não para operação com acervo real.
+O container usa Python 3.12, responde em `/_app/health`, respeita `PORT` e pode ser incorporado no Preview Manus. SQLite é efêmero no container; por isso a publicação é destinada à avaliação funcional e não deve receber acervo ou credenciais operacionais reais.
 
 ## Estrutura
 
-- `app.py`: API FastAPI, inicialização, autenticação, recursos de acervo, demonstração e assets.
-- `catalog_routes.py` e `access_routes.py`: catálogo, documentos, permissões, grupos, contas de serviço e delegação.
-- `advanced_routes.py`: conhecimento rastreável, KML/KMZ, pesquisa espacial e contrato de capacidades.
-- `knowledge_domain.py` e `geo_domain.py`: migrações e regras dos domínios 0.4.
-- `task_queue.py`, `worker.py`, `extraction.py` e `safe_fetch.py`: fila durável, extração isolada e coleta limitada a links explícitos.
-- `index.html`, `ui.js`, `advanced_ui.js` e `styles.css`: interface do Coletor.
-- `demo_mode.py`: dados sintéticos e sessão pública somente de leitura.
-- `Dockerfile`: execução do container de demonstração.
-- `tests/`: regressão da base e cobertura da extensão 0.4.
+- `app.py`: API FastAPI, autenticação, recursos de acervo, demonstração, saúde e assets.
+- `catalog_routes.py`, `access_routes.py` e `advanced_routes.py`: catálogo, ACL, fila, conhecimento, geografia e contratos.
+- `task_queue.py`, `worker.py`, `extraction.py` e `safe_fetch.py`: fila persistente, obtenção segura e extração isolada.
+- `sei_public.py` e `sei_domain.py`: parser e migrações da descoberta pública de processos SEI.
+- `index.html`, `ui.js`, `advanced_ui.js`, `public_sei_ui.js` e `styles.css`: interface preservada e extensão visual 0.5.
+- `demo_mode.py`: dados sintéticos, sessão de construção e limites de acesso.
+- `tests/`: regressão da base, extensão 0.4 e descoberta pública SEI 0.5.
+- `Dockerfile`: execução do container de construção.
