@@ -4,6 +4,7 @@ services:
     command: ["python", "bootstrap.py"]
     environment:
       COLLECTOR_DATA: /data
+      COLLECTOR_DEMO_MODE: "0"
       COLLECTOR_ADMIN_NAME: ${COLLECTOR_ADMIN_NAME:-administrador}
       COLLECTOR_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_password
     volumes: ["collector_data:/data"]
@@ -15,6 +16,7 @@ services:
     environment:
       COLLECTOR_DATA: /data
       COLLECTOR_EMBEDDED_WORKER: "0"
+      COLLECTOR_DEMO_MODE: "0"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -32,6 +34,7 @@ services:
     env_file: .env
     environment:
       COLLECTOR_DATA: /data
+      COLLECTOR_DEMO_MODE: "0"
     depends_on:
       init:
         condition: service_completed_successfully

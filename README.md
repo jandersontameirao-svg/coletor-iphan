@@ -36,7 +36,7 @@ Abra http://127.0.0.1:8000. As variáveis podem ser definidas pelo servidor ou c
 3. Executar docker compose up --build -d. O serviço init cria o primeiro administrador. API e worker compartilham o volume collector_data.
 4. Configurar HTTPS no proxy do servidor e persistir o volume. A porta publicada é somente 127.0.0.1:8000. Para hospedagem em plataforma gerenciada, usar o PORT/proxy oferecido pela plataforma e manter autenticação.
 
-Dockerfile e Compose foram escritos, mas o build do container não foi executado aqui: Docker Engine estava indisponível e WSL não instalado. Wheels Linux foram resolvidos e conferidos; isso não substitui teste de container no servidor.
+O Dockerfile da publicação Manus inicia em modo de construção sem senha, com dados efêmeros e worker embutido; não deve receber acervo, tokens ou operação real. O Compose operacional sobrescreve esse comportamento com `COLLECTOR_DEMO_MODE=0`, mantém autenticação administrativa e separa API/worker. Docker Engine estava indisponível neste ambiente; as dependências Linux foram resolvidas e conferidas, mas isso não substitui o teste de container no servidor.
 
 ## SharePoint
 

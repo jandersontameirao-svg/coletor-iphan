@@ -1,5 +1,6 @@
 FROM python:3.12-slim
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 COLLECTOR_DATA=/data
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 COLLECTOR_DATA=/data \
+    COLLECTOR_DEMO_MODE=1 COLLECTOR_EMBEDDED_WORKER=1 COLLECTOR_ALLOW_EMBED=1
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates poppler-utils tesseract-ocr tesseract-ocr-por && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.lock /app/
