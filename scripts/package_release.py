@@ -9,7 +9,7 @@ import zipfile
 
 root=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--output',type=Path,default=root.parent/'Coletor_IPHAN_0.5_Revisavel.zip')
+parser.add_argument('--output',type=Path,default=root.parent/'Coletor_IPHAN_0.7_Ponte_SharePoint_Revisavel.zip')
 args=parser.parse_args()
 excluded={'data','__pycache__','.git','.venv','.pytest_cache','node_modules','finance_domain.py'}
 extensions={'.py','.json','.txt','.md','.html','.css','.js','.lock'}
@@ -19,22 +19,19 @@ for path in sorted(root.rglob('*')):
     rel=path.relative_to(root)
     if not path.is_file() or path.is_symlink() or any(part in excluded for part in rel.parts): continue
     if configured!=root and path.is_relative_to(configured): continue
-    allowed=path.suffix in extensions or rel.as_posix() in ('.env.example','.gitignore','group-arqueo-logo.png') or (rel.parts[:2]==('docs','screenshots') and path.suffix=='.png')
+    allowed=path.suffix in extensions or rel.as_posix() in ('.env.example','.gitignore','group-arqueo-logo.png') or (rel.parts and rel.parts[0]=='docs' and path.suffix=='.png')
     if not allowed or path.name=='.env' or path.name.startswith('.env.priv'): continue
     entries['coletor-iphan/'+rel.as_posix()]=path.read_bytes()
-entries['LEIA_PRIMEIRO.txt']='''COLETOR IPHAN 0.5 — PACOTE REVISÁVEL
-Comece por coletor-iphan/README.md e docs/release-0.5.md.
-Especificação original e decisão de links: docs/specification/.
-A base 0.3 foi preservada; as expansões adicionam conhecimento rastreável, análise de processos, geografia KML/KMZ/Shapefile/GeoJSON/GPX, formatos documentais e descoberta em páginas públicas SEI fornecidas.
-Afirmações exigem evidência e validação humana; nenhum fato é gerado automaticamente.
-Recursos espaciais são versionados em WGS84 e consultas usam metros geodésicos.
+entries['LEIA_PRIMEIRO.txt']='''COLETOR IPHAN 0.7 — PONTE SHAREPOINT
+Comece por coletor-iphan/README.md, docs/SHAREPOINT.md e docs/release-0.7.json.
+A fundação de processos, ACL, fila, extração, evidências, geografia e descoberta SEI foi preservada.
+A ponte adiciona catálogo organizado, categorias humanas, fila SharePoint com conferência SHA-256 e participantes documentais conservadores.
 O parser SEI só lê páginas públicas fornecidas e links públicos que elas apresentam; não pesquisa processos por número, não faz login e não resolve CAPTCHA.
-Fixture/HTTP local/Chromium não homologam IPHAN, ATENA ou Geoportal institucionais.
-PostgreSQL, OCR e integração externa só são declarados quando efetivamente disponíveis/verificados.
+Participantes exigem fonte e revisão humana; não há inferência de cliente final, contrato, vínculo empregatício ou módulo financeiro.
+Fixture/HTTP local/Chromium não homologam SharePoint, IPHAN, ATENA ou Geoportal institucionais.
 Não há banco/acervo/segredos operacionais. Testes têm credenciais sintéticas.
-Não há publicação externa. Verifique o manifesto interno e o relatório da entrega.
 '''.encode()
-manifest={'version':'0.5.0','packaged_at_utc':datetime.now(timezone.utc).isoformat(),'files':{name:{'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)} for name,data in sorted(entries.items())}}
+manifest={'version':'0.7.0','packaged_at_utc':datetime.now(timezone.utc).isoformat(),'files':{name:{'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)} for name,data in sorted(entries.items())}}
 entries['MANIFESTO_SHA256.json']=(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').encode()
 args.output.parent.mkdir(parents=True,exist_ok=True)
 with zipfile.ZipFile(args.output,'w',zipfile.ZIP_DEFLATED) as archive:

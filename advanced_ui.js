@@ -56,7 +56,7 @@ views.integrations=async root=>{
   contract.append(node('p',`Versão do contrato: ${data.version} · cliente externo homologado: não · Geoportal real homologado: não.`));
   const link=node('a','Abrir contrato OpenAPI');link.href='/openapi.json';link.target='_blank';link.rel='noopener';contract.append(link);
   root.append(contract);
-  const available=panel('Capacidades do escopo 0.5');
+  const available=panel('Capacidades do escopo 0.7');
   for(const text of ['Afirmações vinculadas a evidência: disponível','Validação humana e conflitos: disponível','Importação KML/KMZ, Shapefile, GeoJSON/JSON e GPX em WGS84: disponível','Importação de PDF, TXT, CSV, DOCX e XLSX: disponível','OCR de PDF digitalizado: condicional ao motor instalado','Consulta por entorno em metros: disponível','Descoberta em páginas públicas SEI fornecidas: disponível','Pesquisa por número, login e CAPTCHA: não disponível','Homologação externa IPHAN/ATENA/Geoportal: pendente']) available.append(node('p',text));
   root.append(available);
 };
@@ -66,7 +66,7 @@ views.overview=async root=>{
   await legacyOverviewV04(root);
   try{
     const data=await api('/v1/overview/advanced');
-    const p=panel('Capacidades implementadas no escopo 0.4');
+    const p=panel('Capacidades implementadas no escopo 0.7');
     p.append(node('p',`${data.knowledge_assertions} afirmações rastreáveis · ${data.spatial_resources} recursos espaciais · ${data.spatial_revisions} revisões geográficas.`));
     p.append(button('Conhecimento',()=>navigate('knowledge'),false),button('Pesquisa espacial',()=>navigate('spatial')));
     root.append(p);

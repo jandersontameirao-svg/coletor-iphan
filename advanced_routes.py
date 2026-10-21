@@ -143,6 +143,9 @@ def register(app, db, identity, uid, event, process_access, revision_access):
                 parsed = geo_domain.parse_resource(raw, filename)
             except ValueError as exc:
                 raise HTTPException(422, str(exc))
+            import app as core
+            blob=core.put_blob(raw,filename)
+            core.persist_document(c,process['id'],filename,'spatial-import',user,blob)
             resource_id, revision_id = uid(), uid(); now = time.time(); digest = hashlib.sha256(raw).hexdigest()
             c.execute('INSERT INTO spatial_resources VALUES(?,?,?,?,?,?,?)', (resource_id, process['id'], name[:300], filename[:300], digest, user['id'], now))
             c.execute('INSERT INTO spatial_resource_revisions VALUES(?,?,?,?,?,?,?,?)', (revision_id, resource_id, 1, digest, parsed['srs'], geo_domain.dumps_features(parsed['features']), user['id'], now))
@@ -162,6 +165,9 @@ def register(app, db, identity, uid, event, process_access, revision_access):
             except ValueError as exc:
                 raise HTTPException(422, str(exc))
             version = c.execute('SELECT coalesce(max(version),0)+1 FROM spatial_resource_revisions WHERE resource_id=?', (resource_id,)).fetchone()[0]
+            import app as core
+            blob=core.put_blob(raw,filename)
+            core.persist_document(c,resource['process_id'],filename,'spatial-import',user,blob)
             rid, now = uid(), time.time(); digest = hashlib.sha256(raw).hexdigest()
             c.execute('INSERT INTO spatial_resource_revisions VALUES(?,?,?,?,?,?,?,?)', (rid, resource_id, version, digest, parsed['srs'], geo_domain.dumps_features(parsed['features']), user['id'], now))
             c.execute('UPDATE spatial_resources SET source_filename=?,source_sha256=? WHERE id=?', (filename[:300], digest, resource_id))
@@ -201,12 +207,12 @@ def register(app, db, identity, uid, event, process_access, revision_access):
         with db() as c:
             assertions = sum(1 for row in c.execute('SELECT process_id FROM knowledge_assertions') if _can_read(c, row['process_id'], user))
             resources = sum(1 for row in c.execute('SELECT process_id FROM spatial_resources') if _can_read(c, row['process_id'], user))
-            revisions = c.execute('SELECT count(*) FROM spatial_resource_revisions').fetchone()[0]
+            revisions = sum(1 for row in c.execute('SELECT r.process_id FROM spatial_resource_revisions x JOIN spatial_resources r ON r.id=x.resource_id') if _can_read(c,row['process_id'],user))
             return {'knowledge_assertions': assertions, 'spatial_resources': resources, 'spatial_revisions': revisions, 'knowledge_validation': 'human_review_required', 'external_homologation': False}
 
     @app.get('/v1/integration/capabilities')
     def integration_capabilities(user=Depends(identity)):
-        return {'version': '0.5.0', 'consumer_contract': True, 'atena_real_homologated': False, 'geoportal_real_homologated': False, 'explicit_links_only': True, 'knowledge': {'assertions': True, 'human_validation': True, 'automatic_facts': False}, 'spatial': {'kml': True, 'kmz': True, 'shapefile_zip': True, 'geojson': True, 'json': True, 'gpx': True, 'pdf_document_import': True, 'srs': ['EPSG:4326'], 'distance_units': 'metres'}, 'external_collection': {'implemented': True, 'homologated': False}}
+        return {'version': '0.7.0', 'consumer_contract': True, 'atena_real_homologated': False, 'geoportal_real_homologated': False, 'explicit_links_only': True, 'knowledge': {'assertions': True, 'human_validation': True, 'automatic_facts': False}, 'spatial': {'kml': True, 'kmz': True, 'shapefile_zip': True, 'geojson': True, 'json': True, 'gpx': True, 'pdf_document_import': True, 'srs': ['EPSG:4326'], 'distance_units': 'metres'}, 'external_collection': {'implemented': True, 'homologated': False}}
 
 
 def _can_read(c, pid, user):

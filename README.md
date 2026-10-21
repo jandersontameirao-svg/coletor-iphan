@@ -1,132 +1,89 @@
-# Coletor IPHAN — versão 0.5.0
+# Coletor IPHAN 0.7 — ponte do acervo
 
-Continuação da base 0.2, preservando seus quatro arquivos com 22 testes byte a byte. Nesta entrega: processo canônico compartilhado, ACLs por recurso, grupos, contas de serviço/delegação, entrada por link/lista, descoberta em páginas públicas SEI fornecidas, download direto protegido, resolução manual, extração isolada/versionada, conhecimento rastreável, processos analisados e geografia KML/KMZ, Shapefile ZIP, GeoJSON/JSON e GPX. **Registro de tarefa não comprova obtenção de documento. A leitura pública SEI não representa homologação institucional com IPHAN ou integração ATENA real.**
+Aplicativo na versão 0.7, com quatro abas: **Coleta, Acompanhamento, Biblioteca e Configurações**. Recebe links fornecidos, preserva originais e os envia para o SharePoint. Aplicativos consumidores consultam o mesmo catálogo e suas referências por API. Não há pesquisa automática de processos, login externo do IPHAN nem contorno de CAPTCHA.
 
-A especificação original está em `docs/specification/original.txt`; a decisão atual de entrada por links fornecidos está em `docs/specification/scope-2026-10-15.txt`. Não há busca automática de processos por número. Uma página pública SEI/IPHAN já fornecida pode ser lida uma vez para identificar somente os documentos que ela própria expõe por link público.
+## Organização aprovada
+
+Uma pasta por número de processo (a barra vira hífen), contendo Georreferenciados e Documentos. Os documentos são separados em PAPIPA, RAPIPA, PAIPA, RAIPA, PGPA, **RAIPI**, Educação patrimonial, Outros documentos e A classificar. Pastas são criadas sob demanda. A Biblioteca mostra a pasta prevista, a classificação atual, a origem, o histórico e a confirmação do SharePoint.
+
+Sigla explícita gera sugestão conservadora. Classificações ambíguas não são inventadas. Revisores podem corrigir a categoria. Arquivos já enviados podem ser movidos pela Biblioteca usando Atualizar pasta no SharePoint, sem duplicar o item remoto. Componentes geográficos em um compactado permanecem juntos. Arquivos sem classificação segura ficam em A classificar.
 
 ## Instalação local
 
-Linux x86_64, Python 3.12. O parser utiliza limites POSIX e não oferece suporte nativo a Windows. Na pasta deste projeto:
+Python **3.12**, Linux x86_64 ou Windows x64. No diretório do código:
 
 ```sh
 python -m venv .venv
-. .venv/bin/activate
+# Linux: . .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install --require-hashes -r requirements.lock
-python app.py
+python bootstrap.py
 uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Bootstrap solicita administrador/senha sem ecoar a senha; mínimo 12 caracteres e sem senha padrão. Em outro terminal, ative a mesma venv, use a mesma pasta e `COLLECTOR_DATA`, e execute:
+Em outro terminal, mesmo ambiente e COLLECTOR_DATA:
 
 ```sh
 python worker.py
 ```
 
-Abra http://127.0.0.1:8000. As telas são visão geral, entrada de links, tarefas, processos, documentos/revisões, biblioteca, integrações e administração. Seleção de processo e filtro da biblioteca persistem durante a sessão. API/OpenAPI em `/openapi.json`, documentação interativa em `/docs`. O snapshot do contrato acompanha a entrega em `docs/openapi.json`. Quando `COLLECTOR_DEMO_MODE=1`, a interface abre automaticamente a sessão sintética sem senha. Com `COLLECTOR_EMBEDDED_WORKER=1`, essa sessão somente pode iniciar/retomar a descoberta pública SEI; fora desse modo, o login continua obrigatório.
+Abra http://127.0.0.1:8000. As variáveis podem ser definidas pelo servidor ou carregadas por seu gerenciador de ambiente. A execução Python simples **não lê .env automaticamente**. Para Uvicorn sem carregar .env, exporte as variáveis no terminal/serviço; o Compose carrega .env. Bootstrap solicita senha sem exibi-la. Não existe senha padrão. `COLLECTOR_EMBEDDED_WORKER=1` permite execução em um único processo servidor, se o provedor não oferecer worker separado; manter um único worker em desenvolvimento simplifica a operação.
 
-O lock inclui dependências transitivas de runtime e testes HTTP, com hashes de wheels para este ambiente. Instalação em venv nova foi realizada com os wheels previamente baixados, sem acesso ao índice durante a instalação. O ambiente de construção usou Python 3.12.14, Chromium 154.0.8037.57 e Playwright 1.62.0. Wheels não acompanham o ZIP; instalação a partir do índice depende de conectividade. Não confundir isso com uma imagem Docker ou homologação de implantação.
+## Instalação Docker/Compose
 
-## Repositório e autorização
+1. Copiar .env.example para .env e preencher os identificadores Microsoft conforme docs/SHAREPOINT.md.
+2. Criar localmente secrets/bootstrap_password.txt com uma senha forte (mínimo de 12 caracteres). Não enviar esse arquivo nem .env ao repositório.
+3. Executar docker compose up --build -d. O serviço init cria o primeiro administrador. API e worker compartilham o volume collector_data.
+4. Configurar HTTPS no proxy do servidor e persistir o volume. A porta publicada é somente 127.0.0.1:8000. Para hospedagem em plataforma gerenciada, usar o PORT/proxy oferecido pela plataforma e manter autenticação.
 
-O banco continua SQLite, com migrações aditivas v2/v3. Registro canônico por número normalizado no domínio `central`; duplicatas legadas são isoladas até revisão. A coluna legada `owner` registra o criador e **não controla acesso**. A fonte autoritativa é `resource_grants`. Permissões:
+Dockerfile e Compose foram escritos, mas o build do container não foi executado aqui: Docker Engine estava indisponível e WSL não instalado. Wheels Linux foram resolvidos e conferidos; isso não substitui teste de container no servidor.
 
-| Permissão do processo | Operações |
-|---|---|
-| read | Catálogo, originais, evidências, histórico, biblioteca e consultas |
-| operate | Leitura, upload, tarefas, extração, resolução manual/cancelamento/retomada |
-| review | Leitura e classificações técnicas vinculadas à revisão |
-| admin | Todas as anteriores, renomeação e concessão/revogação de acesso |
+## SharePoint
 
-Administrador da plataforma gerencia usuários, grupos, serviços e migração. Esse papel não libera a leitura de todos os acervos. Equipes recebem acesso ao mesmo processo por grupo; não criam novas pastas nem cópias. Desativar o criador não remove o acesso dos demais membros. Concessões, revogações, delegações, uniões e operações ficam na auditoria/outbox.
+O link da pasta do site ATENA informado por Janderson é o destino inicial. Ele não dá permissão de escrita sozinho. A instalação precisa de um registro de aplicativo Microsoft Entra de cliente público (tenant/client IDs) com Files.ReadWrite delegado e consentimento da organização. O usuário conecta pela página oficial Microsoft; o Coletor guarda tokens criptografados. **Não é necessário fornecer senha Microsoft nem segredo de cliente ao Coletor.**
 
-Sessões de usuário: token aleatório em memória da página, hash no banco, expiração em oito horas e revogação no logout. Senhas: PBKDF2-SHA256 com salt e 310 mil iterações. Contas de serviço: token exibido uma vez pela API, armazenado por hash e válido por 30 dias; revogação desativa o serviço e invalida suas delegações/tarefas. Use cofre para a credencial. Delegação: registro emitido pelo próprio usuário humano, duração máxima de oito horas, serviço exato e escopos por processo. `X-Delegation-Id` exige token do serviço correspondente e interseção das permissões atuais do usuário e do serviço. `request_context.user_id` não concede identidade.
+Depois de conectar, testar leitura/gravação pela interface. O teste cria, confere e remove seu próprio TXT de teste. A fila só usa destino validado. Transferências só viram uploaded após releitura e conferência SHA-256. Se houver falha, o original local permanece preservado; não há exclusão automática do cache. A permissão Microsoft deve estar alinhada às equipes que acessarão os links do SharePoint. Acesso Condicional ou revogação podem exigir nova autenticação.
 
-Bytes canônicos em `data/blobs/<sha256>`; pastas são lógicas no catálogo. A-B-A preserva três revisões e dois blobs. Recaptura idêntica gera ocorrência sem nova revisão. Links distintos com mesmo basename mantêm documentos lógicos distintos; o mapeamento por URL estabiliza recapturas. O filename de resposta, quando disponível, é preservado na ocorrência; nome de navegação recebe extensão compatível. Evidências, índices e classificações não alteram originais.
+Detalhes: [docs/SHAREPOINT.md](docs/SHAREPOINT.md).
 
-## Links: receber → obter → disponibilizar
+## Formatos e limites
 
-`POST /v1/collection-jobs` aceita `input.url` ou `input.urls`, de 1 a 50 itens, e `process_id` opcional. Cada item tem validação e estado próprios. Comando limitado a 256 KiB e até 100 tarefas pendentes por solicitante. Resposta 202 com `job_id`/`status_url` significa **recebimento**. Consulte `/links` para resultados individuais.
+Preservação de PDF, HTML nativo documental do SEI, TXT/CSV, DOCX/XLSX, Office legado, imagens, ZIP/RAR/7z, KML/KMZ, componentes SHP, GeoJSON/GPX e outros formatos técnicos enumerados em archive_policy.py. Validação de assinatura/formato não equivale a antivírus. Compactados não são executados nem descompactados no filesystem. ZIPs têm inventário limitado e proteção contra traversal. RAR/7z são preservados, sem interpretação interna nesta versão.
 
-Sem processo associado, um link direto de documento pede cadastro/seleção pela retomada antes de acessar a origem. Uma página SEI pública fornecida pode criar/reutilizar o processo canônico declarado nela e registrar seus documentos filhos. Caminhos implementados: download direto de PDF ou texto UTF-8 público e leitura única de `md_pesq_processo_exibir.php` em `sei.iphan.gov.br`, com descoberta exclusiva de URLs `md_pesq_documento_consulta_externa.php` mostradas na tabela. Não há busca por número, paginação externa, automação de login ou resolução de CAPTCHA.
+Até 50 URLs por tarefa (listas maiores divididas pela interface), 1.000 documentos por página e 25.000 por tarefa. Truncamento é pendência explícita, nunca coleta integral. Até 128 MiB por arquivo e 2 GiB de originais confirmados por tarefa. Limites ampliados em relação à 0.5 para permitir anexos maiores; o download ainda usa buffer em memória, portanto dimensionar o servidor considerando esses limites. A extração legada tem limite independente de 20 MiB; capacidade de preservar não presume capacidade de interpretar.
 
-SSRF: HTTPS/443, allowlist exata configurável, sem credenciais/fragmentos, resolução DNS com prazo de cinco segundos, rejeição de endereços não globais/transição IPv6, IP fixado na conexão e SNI/certificado do hostname original. Cada redirect é validado/resolvido novamente; máximo cinco. Proxy HTTPS herdado é mantido, com CONNECT ao IP validado; recusa pelo proxy vira pendência, sem fallback que contorne a política. TLS permanece verificado. Limites: 20 MiB por documento, 100 MiB de originais confirmados por tarefa, timeout de conexão/leitura, cadência mínima de 0,2 segundo entre itens. Não há varredura do portal.
+## API e consumidores
 
-HTML não é salvo como PDF. Login/CAPTCHA, 401/403, 404, 429, falhas de DNS/rede e respostas não documentais geram ação necessária/importação manual. A detecção de login/CAPTCHA é heurística por indicadores; não comprova que todo conteúdo da origem exija autenticação. Lista com documentos confirmados e problemas termina em `partial`; somente barreiras em `waiting_for_user`; lista totalmente inválida termina em `failed` e exige novo comando corrigido.
+OpenAPI vivo em /openapi.json e interface /docs. Snapshot em docs/openapi.json. Sessões e contas de serviço/delegação usam Bearer e ACLs por processo. Solicitações de coleta usam Idempotency-Key. Principais rotas:
 
-Corrija item pendente por `PATCH .../links/{item_id}`. Importe documento autorizado por `POST .../links/{item_id}/import?name=arquivo.pdf`, corpo binário. Quando todos os itens estão resolvidos manualmente, a tarefa pode concluir com `downloaded=0` e `manually_imported>0`. Retomada preserva itens confirmados e só repete pendências solicitadas. Há limite de três aquisições por tarefa; no esgotamento, importação manual continua disponível, mas nova tentativa de acesso exige novo comando. O emissor humano pode retomar sua própria tarefa delegada usando autorização humana atual, com evento específico, após expiração da delegação.
+- POST /v1/collection-jobs; GET /v1/collection-jobs/{id}/links; cancel/resume e importação manual.
+- GET /v1/bridge/library — filtros, paginação, origem e SharePoint.
+- GET /v1/bridge/manifest/{process_id} — revisões, hashes, ocorrências e referências remotas.
+- GET /v1/document-revisions/{id}/download — original autorizado do cache.
+- GET /v1/bridge/transfers; POST /v1/bridge/transfers/{id}/retry.
+- PATCH /v1/bridge/documents/{id}/category; POST .../{id}/move.
 
-## Extração, biblioteca e evidências
+As APIs históricas de extração/geografia/conhecimento permanecem para compatibilidade e migração, com correções da auditoria. Não têm abas no aplicativo ponte. Extração/análise não são disparadas automaticamente pela coleta. Não há integração real homologada com ATENA/Geoportal, webhooks externos ou treinamento de modelos. O contrato de leitura e os IDs já podem ser utilizados pelos consumidores.
 
-Worker executa parser em subprocesso com ambiente sem credenciais herdadas: 512 MiB de memória, 30 segundos de CPU, 35 segundos de prazo real, saída limitada a 16 MiB, entrada a 20 MiB, 5 mil páginas e 2 milhões de caracteres. O supervisor termina o filho após cancelamento/perda de autorização/lease. Isso não é sandbox de filesystem/rede nem scanner antimalware.
-
-Cada execução tem `ExtractionRun`: revisão, ferramenta, versão, estado, início/fim, falha e IDs das evidências. Extração padrão reutiliza execução concluída da mesma versão; pedidos assíncronos concorrentes compartilham a tarefa. Reprocessamento explícito cria novo histórico. PDF sem páginas, texto vazio e parsing inválido falham; páginas sem texto tentam OCR quando `tesseract`/`pdftoppm` estão instalados e, sem o motor ou sem resultado, sinalizam `needs_ocr` sem evidências vazias/fictícias. CSV, DOCX e XLSX são lidos sem executar macros; TXT não recebe página ou contagem de páginas fictícia.
-
-Biblioteca é índice sobre documentos, com tipos PAPIPA, RAPIPA, PAIPA, RAIPA, PGPA, RAIPI e educação patrimonial. Taxonomia seed versionada, ainda sem aprovação do responsável técnico. Classificação pelo revisor autorizado exige revisão existente e permissão review. Alterações preservam predecessor; não há classificador automático. Busca textual recupera somente evidências autorizadas; não há busca semântica nem afirmação factual automática. O painel `Processos analisados` calcula o status real a partir de documentos, extrações, classificações, evidências e revisões pendentes. A busca espacial aceita KML/KMZ, Shapefile ZIP, GeoJSON/JSON e GPX em WGS84, com entorno em metros.
-
-Lease de 120 segundos renovado periodicamente por heartbeat; exclusividade/fencing da tarefa e da execução de extração. Recuperação cria uma nova execução vinculada ao novo lease: o worker antigo não altera o run do substituto. Resultados/checkpoint/outbox são transacionais. Uma unidade de extração interrompida reinicia essa unidade; coleta retoma a lista pelos itens já confirmados. Ver `docs/queue.md`.
-
-## Testes, demonstração e recuperação
+## Testes e recuperação
 
 ```sh
 python scripts/run_tests.py
-```
-
-O runner usa base temporária. Os 22 testes originais foram preservados e passaram antes/depois das alterações; hashes em `docs/original-test-preservation.json`. Suite expandida: 73 testes aprovados em 19/10/2026. Para o E2E:
-
-```sh
 pip install -r requirements-browser.txt
-# Instale Chromium do sistema em ambiente de teste; o teste usa /usr/bin/chromium.
-python scripts/run_tests.py
+python scripts/browser_bridge.py
 ```
 
-Se Playwright/Chromium faltarem, o E2E registra skip, não aprovação. Reports em `docs/validation-v0.3.txt`, `docs/clean-install-validation.txt` e `docs/browser-validation.txt`; screenshot sintética em `docs/screenshots/overview.png`. O aviso Starlette/httpx é de depreciação. `job_execution_error` é esperado no teste que injeta rollback.
+O E2E usa Chrome/Edge/Chromium local (CHROMIUM_PATH opcional) ou um Chromium instalado pelo Playwright. Ele cria dados sintéticos temporários. Os dois testes históricos de browser referem-se à interface antiga; o novo E2E cobre a interface de quatro abas. Resultados reais desta entrega estão em docs/validation-0.7.txt e docs/browser-0.7.txt.
 
-Roteiro completo em `docs/demo.md`. Para backup/restauração, pare API e todos os workers e aguarde término dos processos:
+Para backup/restauração, parar API e workers e usar backup.py, conforme a documentação histórica. O backup verifica catálogo, FKs e blobs e inclui o estado das transferências. A chave token.key fica separada do backup: guardar em cofre ou reconectar a conta Microsoft após a restauração; o acervo não depende do token para ser recuperado. Não excluir o volume local sem backup: ele contém catálogo, rastreabilidade e arquivos pendentes de envio. SharePoint é o destino documental central; SQLite/cache continuam necessários para operar o Coletor. Não hospedar o SQLite em pasta sincronizada do SharePoint/OneDrive.
 
-```sh
-python backup.py backup data /tmp/iphan-backup
-python backup.py restore /tmp/iphan-backup /tmp/iphan-restored
-COLLECTOR_DATA=/tmp/iphan-restored uvicorn app:app --host 127.0.0.1 --port 8000
-```
+Não há migração automática de uma base produtiva executada nesta entrega. Testar restauração e a migração de uma cópia antes de usar acervo real. RPO/RTO e concorrência de produção precisam ser medidos no servidor.
 
-Destino deve ser inexistente. Script verifica banco, vínculos e hashes, gera manifesto derivado e não coordena escritores ativos. RPO/RTO não medidos. O ZIP de código não inclui acervo operacional, banco, usuários, tokens ou senhas.
+## Estado de entrega
 
-## Integração e estado de entrega
+Código implementado e testado localmente; não é apenas um comando para desenvolvimento. A homologação restante depende de acesso e infraestrutura: consentimento Microsoft, MFA, pasta real, coleta real representativa, deploy Linux/Compose e consumidores ATENA/Geoportal. Nenhum desses acessos foi simulado como homologação. O ZIP original foi preservado. Documentos de versões anteriores estão em docs/legacy e são evidência histórica, não relatórios da versão 0.7.
 
-Contrato e exemplos em `docs/contracts.md`. O cliente lê credenciais de `COLLECTOR_TOKEN` e, quando aplicável, `COLLECTOR_DELEGATION_ID`, sem argumentos de segredo:
 
-```sh
-python reference_client.py --revision-id ID_DA_REVISAO
-python reference_client.py --links-file links.txt --process-id ID_DO_PROCESSO
-```
+## Novo na versão 0.7: participantes para inteligência de mercado
 
-Verificação externa é separada: `python scripts/verify_external.py --url LINK_AUTORIZADO`. Em 19/10, uma página pública de processo fornecida pelo usuário exibiu a tabela de documentos e links públicos diretos que responderam PDF. Isso valida a estrutura de leitura, mas não equivale a homologação institucional; ATENA OS real não foi acessada. Detalhes em `docs/sei-public-discovery-evidence-2026-10-19.md`.
-
-F1 avançou, mas o aceite integral da especificação original ainda depende de PostgreSQL/PostGIS em servidor real e demais requisitos. OCR efetivo, outros formatos, especialistas, organizações/múltiplos domínios, vínculos temporais de projeto, transporte/consumidores da outbox, CI/Compose, retenção, hardening e homologação externa seguem pendentes. A base auditada antiga ATENA e seus achados A01–A15 continuam indisponíveis; o pacote 0.2 utilizado aqui é a base independente já criada. A publicação demonstrativa não equivale a implantação operacional. Ver relatório de corrigido/testado/pendente/bloqueado em `docs/release-0.5.md` e matriz em `docs/matrix.md`.
-
-## Extensão 0.4 no escopo real do Coletor
-
-A cópia 0.4 mantém a base 0.3 e adiciona capacidades previstas na especificação original, sem criar módulos financeiros ou comerciais:
-
-- **Conhecimento rastreável:** afirmações sempre vinculadas a uma evidência autorizada, com tipos explícitos, validação humana, rejeição, conflito e relações entre afirmações. O sistema não gera fatos automaticamente.
-- **Geografia:** importação de KML/KMZ, Shapefile ZIP, GeoJSON/JSON e GPX, validação de coordenadas WGS84, revisões versionadas e consulta por ponto/entorno com distância geodésica em metros. Recursos espaciais são índices; não duplicam o original documental. PDF continua sendo importado como documento do processo.
-- **Contratos:** `/v1/integration/capabilities` registra o que consumidores podem usar e mantém `atena_real_homologated=false` e `geoportal_real_homologated=false` enquanto não houver homologação externa autorizada.
-- **OCR:** a API informa explicitamente se `tesseract` e `pdftoppm` existem no host. PDF digitalizado sem texto continua como `needs_ocr`; nenhuma evidência vazia ou inventada é criada.
-
-Rotas novas:
-
-```text
-GET  /v1/knowledge/assertions
-POST /v1/knowledge/assertions
-PATCH /v1/knowledge/assertions/{id}
-POST /v1/knowledge/assertions/{id}/relations
-GET  /v1/spatial-resources
-POST /v1/spatial-resources?process_id=...&name=...&filename=...
-POST /v1/spatial-resources/{id}/revisions?filename=...
-GET  /v1/spatial-resources/{id}
-POST /v1/spatial-search
-GET  /v1/overview/advanced
-GET  /v1/integration/capabilities
-```
-
-A ausência de PostgreSQL, Geoportal, ATENA real, OCR ou acesso positivo IPHAN no ambiente não é mascarada: cada capacidade aparece como disponível, condicional, pendente ou não homologada conforme o caso.
+Extração automática em segundo plano, cruzamento de documentos administrativos/técnicos, papéis separados, evidências por documento/revisão/página, revisão humana e exportação JSON. Acesso pelo botão Empresas e responsáveis da Biblioteca, mantendo as quatro abas. Detalhes e limites em [docs/MARKET.md](docs/MARKET.md). O extrator é determinístico e conservador; não infere cliente final nem contrato a partir de coocorrência.

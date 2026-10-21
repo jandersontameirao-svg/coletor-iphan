@@ -133,6 +133,8 @@ def extract_xlsx(data):
 
 
 def extract(data, mime):
+    if mime == 'text/html':
+        return extract_html(data)
     if mime == 'text/plain':
         try:
             return data.decode('utf-8')
@@ -145,3 +147,22 @@ def extract(data, mime):
     if mime == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
         return extract_xlsx(data)
     raise ValueError('Formato documental não suportado')
+
+
+def extract_html(data):
+    from html.parser import HTMLParser
+    class Reader(HTMLParser):
+        def __init__(self):super().__init__(convert_charrefs=True);self.parts=[];self.hidden=0
+        def handle_starttag(self,tag,attrs):
+            if tag in ('script','style','noscript'):self.hidden+=1
+            if not self.hidden and tag in ('p','div','br','tr','li','h1','h2','h3'):self.parts.append('\n')
+        def handle_endtag(self,tag):
+            if tag in ('script','style','noscript') and self.hidden:self.hidden-=1
+            if not self.hidden and tag in ('p','div','tr','li'):self.parts.append('\n')
+        def handle_data(self,text):
+            if not self.hidden:self.parts.append(text)
+    parser=Reader()
+    try:text=data.decode('utf-8-sig')
+    except UnicodeDecodeError:text=data.decode('iso-8859-1')
+    parser.feed(text)
+    return _clean(''.join(parser.parts).splitlines())

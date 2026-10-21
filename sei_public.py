@@ -6,6 +6,7 @@ import re
 from urllib.parse import urljoin
 
 import safe_fetch
+import archive_policy
 
 PROCESS_HOST = "sei.iphan.gov.br"
 PROCESS_PATH = "/sei/modulos/pesquisa/md_pesq_processo_exibir.php"
@@ -98,7 +99,8 @@ def parse_process_page(page: bytes, source_url: str) -> dict:
         included_at = dates[1] if len(dates) > 1 else ""
         unit = ""
         if included_at:
-            after_included = values[values.index(included_at) + 1:]
+            date_indices=[i for i,value in enumerate(values) if re.fullmatch(r'\d{2}/\d{2}/\d{4}',value)]
+            after_included = values[date_indices[1] + 1:]
             unit = next((value for value in after_included if value), "")
         elif len(values) > 1:
             unit = values[-1]
@@ -170,7 +172,7 @@ def fetch_process_page(url: str, guard=lambda: None) -> dict:
         content_type = headers.get("content-type", "").split(";", 1)[0].lower()
         if content_type not in ("text/html", "application/xhtml+xml") and not body.lstrip().lower().startswith((b"<!doctype html", b"<html")):
             raise safe_fetch.FetchError("page_not_process", "A resposta não é uma página pública de processo")
-        return parse_process_page(body, current)
+        return {**parse_process_page(body, current), '_raw_html':body}
     raise safe_fetch.FetchError("redirect_limit", "Limite de redirecionamentos")
 
 
@@ -181,7 +183,7 @@ def document_filename(metadata: dict, fetched: dict) -> str:
     safe_title = re.sub(r"[\\/:*?\"<>|\x00-\x1f]", " ", title)
     safe_title = re.sub(r"\s+", " ", safe_title).strip(" .")[:240] or "documento"
     prefix = f"{number} — " if number else ""
-    extension = ".pdf" if fetched.get("mime") == "application/pdf" else ".txt"
+    extension = next((ext for ext,mime in archive_policy.MIMES.items() if mime==fetched.get('mime')), '.bin')
     if safe_title.lower().endswith(extension):
         return (prefix + safe_title)[:300]
     return (prefix + safe_title)[:300 - len(extension)] + extension

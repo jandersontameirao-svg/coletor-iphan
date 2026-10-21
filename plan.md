@@ -1,36 +1,33 @@
-# Plano de entrega — Coletor IPHAN 0.5
+# Plano técnico — Coletor IPHAN 0.7
 
 ## Objetivo
 
-Entregar e publicar a versão 0.5 do Coletor IPHAN como repositório técnico rastreável de processos, documentos, evidências, conhecimento e geografia. O produto não possui módulos financeiros, comerciais, de empresas, contratos, fluxo de caixa, DRE ou EBITDA. Esses temas não pertencem ao aplicativo nem a esta entrega.
+Publicar o Coletor IPHAN como ponte rastreável entre links fornecidos, catálogo documental autorizado, Biblioteca e SharePoint, preservando originais, revisões, hashes, evidências, ACLs e histórico. O módulo de participantes é determinístico e baseado em fontes documentais; não é um módulo financeiro, comercial ou de prospecção.
 
-## Escopo implementado
+## Escopo entregue
 
-A fundação preserva processos canônicos, ACL por processo, grupos, contas de serviço, delegações e auditoria. Originais PDF/TXT são guardados por SHA-256 com revisões, ocorrências, proveniência, download protegido e extração assíncrona. Conhecimento só pode ser registrado mediante evidência autorizada e passa por revisão humana. Recursos espaciais KML/KMZ, Shapefile ZIP, GeoJSON/JSON e GPX são versionados em WGS84 e consultados por ponto e entorno em metros; PDF permanece no fluxo documental.
+A versão 0.7 mantém a fundação de processos canônicos, ACL por processo, grupos, contas de serviço, delegação, auditoria, fila persistente, extração isolada, conhecimento rastreável e geografia em WGS84. A interface operacional possui quatro abas: Coleta, Acompanhamento, Biblioteca e Configurações.
 
-A versão 0.5 adiciona descoberta de documentos em páginas públicas do SEI/IPHAN fornecidas explicitamente pelo usuário. Ela reconhece apenas o endpoint público de processo, registra número/título do processo e os documentos exibidos na tabela, e acessa somente os links públicos de documentos que a própria página apresenta. Processos são criados ou reutilizados canonicamente para o solicitante humano; uma associação manual a processo divergente é recusada. Cada documento guarda a URL pública, o identificador exibido, título, datas, unidade e resultado individual.
+A coleta aceita links HTTPS explícitos, páginas públicas SEI/IPHAN fornecidas e importação manual. A página SEI só pode revelar documentos que ela própria apresenta publicamente; login, CAPTCHA, pesquisa automática por número e contorno de restrições continuam proibidos. Original, ocorrência, revisão, hash e proveniência são preservados antes de qualquer transferência.
 
-Documentos sem link público ou sinalizados como restritos não recebem requisição: ficam pendentes para solução autorizada. Respostas de login, CAPTCHA, HTML, restrição, redirecionamento indevido, erro ou formato não permitido também permanecem pendentes. O aplicativo não pesquisa processos por número, não preenche formulários, não autentica em sistemas externos, não resolve CAPTCHA e não tenta contornar controles de acesso.
+A ponte SharePoint implementa configuração de destino, autenticação Microsoft por device code sem senha Microsoft dentro do Coletor, cache criptografado de tokens, validação do link, criação de pastas sob demanda, upload, releitura com conferência SHA-256, fila, retry, retomada, movimentação de categoria e preservação local até confirmação. Credenciais e consentimento reais permanecem responsabilidade da organização.
 
-A entrada limpa cabeçalhos e textos não URL, remove duplicatas e divide listas com mais de 50 URLs em tarefas de até 50 itens. A descoberta limita 1.000 documentos por página e 25.000 por tarefa. O limite de 100 MiB de originais confirmados por tarefa, 20 MiB por arquivo, TLS validado, DNS público fixado, allowlist, SNI, redirects validados e cadência mínima permanecem ativos.
+A organização física usa uma pasta por processo, com `Georreferenciados` e `Documentos`. As categorias documentais incluem PAPIPA, RAPIPA, PAIPA, RAIPA, PGPA, RAIPI, Educação patrimonial, Outros documentos e A classificar. Ambiguidade não é inventada; a classificação humana mantém histórico e o reenvio não duplica o item remoto.
 
-## Interface e identidade visual
+O módulo Empresas e responsáveis identifica somente papéis, CNPJ, contatos e trechos explicitamente encontrados em documentos. Fatos começam como `proposed`, exigem revisão humana e preservam evidências, revisão, página real ou unidade textual, hash e origem. Nomes iguais sem CNPJ são apenas candidatos; o sistema não infere cliente final, contrato ou vínculo empregatício.
 
-A interface FastAPI servida pelo backend tem telas para Visão geral, Entrada de links, Tarefas, Processos, Documentos, Biblioteca, Integrações, Administração, Conhecimento e Pesquisa espacial. A camada de entrada diferencia links diretos de páginas públicas SEI, exibe a origem do processo e o status de cada documento descoberto. Mantém a identidade local do Grupo Arqueo, linguagem técnica e indicações transparentes de capacidade.
+## Arquitetura
 
-## Demonstração e publicação
+- `app.py`: API, autenticação, catálogo, health check, assets e bootstrap de módulos.
+- `bridge_routes.py`, `sharepoint_store.py`, `archive_policy.py`: ponte, destino, categorias e transferências.
+- `market_routes.py`, `market_domain.py`, `market_extract.py`: participantes, evidências, revisão e exportação JSON.
+- `task_queue.py`, `worker.py`, `safe_fetch.py`, `extraction.py`, `extraction_child.py`: fila, obtenção segura e extração.
+- `repository_migration.py`, `sei_domain.py`, `knowledge_domain.py`, `geo_domain.py`: migrações e domínios documentais, SEI, conhecimento e geografia.
+- `bridge.html`, `bridge_ui.js`, `bridge.css`: interface 0.7 de quatro abas.
+- `tests/`: regressão histórica, ponte SharePoint, participantes, formatos, geografia, SEI, ACL e fila.
 
-O modo de construção abre sem senha e usa dados efêmeros. Ele permite somente a criação/retomada da fila de descoberta pública SEI e a coleta de documentos publicamente expostos. Criação de usuários, grupos, permissões, contas de serviço, uploads, importações, edição, exclusão, classificação, login externo e administração continuam bloqueados. O worker é habilitado apenas por variável explícita neste ambiente de construção.
+## Publicação e limites
 
-O container usa Python 3.12, responde em `/_app/health`, respeita `PORT` e pode ser incorporado no Preview Manus. SQLite é efêmero no container; por isso a publicação é destinada à avaliação funcional e não deve receber acervo ou credenciais operacionais reais.
+O container usa Python 3.12, instala Poppler/Tesseract para OCR condicional, respeita `PORT` e responde em `/_app/health`. O banco SQLite/cache local precisa de volume persistente em implantação operacional. O SharePoint real requer `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, consentimento delegado `Files.ReadWrite`, conta autorizada e validação do destino.
 
-## Estrutura
-
-- `app.py`: API FastAPI, autenticação, recursos de acervo, demonstração, saúde e assets.
-- `catalog_routes.py`, `access_routes.py` e `advanced_routes.py`: catálogo, ACL, fila, conhecimento, geografia e contratos.
-- `task_queue.py`, `worker.py`, `extraction.py` e `safe_fetch.py`: fila persistente, obtenção segura e extração isolada.
-- `sei_public.py` e `sei_domain.py`: parser e migrações da descoberta pública de processos SEI.
-- `index.html`, `ui.js`, `advanced_ui.js`, `public_sei_ui.js` e `styles.css`: interface preservada e extensão visual 0.5.
-- `demo_mode.py`: dados sintéticos, sessão de construção e limites de acesso.
-- `tests/`: regressão da base, extensão 0.4 e descoberta pública SEI 0.5.
-- `Dockerfile`: execução do container de construção.
+A entrega não declara homologação real do SharePoint, IPHAN, ATENA ou Geoportal. Não inclui tokens, senha, segredo de cliente, banco operacional ou acervo real.

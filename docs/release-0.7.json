@@ -1,0 +1,403 @@
+{
+  "version": "0.7.0",
+  "date": "2026-10-20",
+  "original_zip_sha256": "bfe4fe7581e60fad8e7e771d46f236957c6aee36b60a6b2a4025fa6ffa737919",
+  "tests": {
+    "discovered": 110,
+    "passed": 108,
+    "skipped": 2,
+    "failed": 0,
+    "browser_e2e": "passed",
+    "browser_checks": [
+      "login",
+      "4 tabs",
+      "process",
+      "manual import",
+      "RAIPI folder",
+      "library",
+      "download bytes",
+      "transfers",
+      "settings",
+      "mobile",
+      "logout",
+      "participants with sources",
+      "administrative technical crossing"
+    ]
+  },
+  "installation": {
+    "clean_windows_lock": "passed",
+    "linux_wheels_resolved": true,
+    "docker_build": "not_run_engine_unavailable"
+  },
+  "external": {
+    "sharepoint_real": "requires_organization_authentication",
+    "iphan_real_new_version": "not_run",
+    "atena_geoportal_real": "not_homologated"
+  },
+  "scope": [
+    "Coleta",
+    "Acompanhamento",
+    "Biblioteca",
+    "Configuracoes"
+  ],
+  "storage": "SharePoint central + persistent local catalogue and pending cache",
+  "organization": "process_number / Georreferenciados OR Documentos / study_type (including RAIPI)",
+  "changes": [
+    {
+      "path": ".dockerignore",
+      "status": "added"
+    },
+    {
+      "path": ".env.example",
+      "status": "modified"
+    },
+    {
+      "path": "advanced_routes.py",
+      "status": "modified"
+    },
+    {
+      "path": "app.py",
+      "status": "modified"
+    },
+    {
+      "path": "archive_policy.py",
+      "status": "added"
+    },
+    {
+      "path": "authorization.py",
+      "status": "modified"
+    },
+    {
+      "path": "bootstrap.py",
+      "status": "added"
+    },
+    {
+      "path": "bridge.css",
+      "status": "added"
+    },
+    {
+      "path": "bridge.html",
+      "status": "added"
+    },
+    {
+      "path": "bridge_routes.py",
+      "status": "added"
+    },
+    {
+      "path": "bridge_ui.js",
+      "status": "added"
+    },
+    {
+      "path": "catalog_routes.py",
+      "status": "modified"
+    },
+    {
+      "path": "compose.yaml",
+      "status": "added"
+    },
+    {
+      "path": "Dockerfile",
+      "status": "added"
+    },
+    {
+      "path": "document_extractors.py",
+      "status": "modified"
+    },
+    {
+      "path": "extraction.py",
+      "status": "modified"
+    },
+    {
+      "path": "extraction_child.py",
+      "status": "modified"
+    },
+    {
+      "path": "geo_domain.py",
+      "status": "modified"
+    },
+    {
+      "path": "index.html",
+      "status": "modified"
+    },
+    {
+      "path": "MANIFESTO_SHA256_0.6.json",
+      "status": "added"
+    },
+    {
+      "path": "market_domain.py",
+      "status": "added"
+    },
+    {
+      "path": "market_extract.py",
+      "status": "added"
+    },
+    {
+      "path": "market_routes.py",
+      "status": "added"
+    },
+    {
+      "path": "process_limits.py",
+      "status": "added"
+    },
+    {
+      "path": "README.md",
+      "status": "modified"
+    },
+    {
+      "path": "requirements-browser.txt",
+      "status": "modified"
+    },
+    {
+      "path": "requirements-freeze.txt",
+      "status": "modified"
+    },
+    {
+      "path": "requirements.lock",
+      "status": "modified"
+    },
+    {
+      "path": "requirements.txt",
+      "status": "modified"
+    },
+    {
+      "path": "safe_fetch.py",
+      "status": "modified"
+    },
+    {
+      "path": "sei_public.py",
+      "status": "modified"
+    },
+    {
+      "path": "sharepoint_store.py",
+      "status": "added"
+    },
+    {
+      "path": "worker.py",
+      "status": "modified"
+    },
+    {
+      "path": "docs/browser-0.6.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/browser-0.7.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/MARKET.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/MATRIZ_0.6.csv",
+      "status": "added"
+    },
+    {
+      "path": "docs/openapi.json",
+      "status": "modified"
+    },
+    {
+      "path": "docs/release-0.6.json",
+      "status": "added"
+    },
+    {
+      "path": "docs/SHAREPOINT.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/validation-0.6.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/validation-0.7.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/validation-market-targeted.txt",
+      "status": "added"
+    },
+    {
+      "path": "scripts/browser_bridge.py",
+      "status": "added"
+    },
+    {
+      "path": "tests/test_bridge.py",
+      "status": "added"
+    },
+    {
+      "path": "tests/test_market.py",
+      "status": "added"
+    },
+    {
+      "path": "tests/test_v04_scope.py",
+      "status": "modified"
+    },
+    {
+      "path": "docs/legacy/baseline-2026-10-15.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/brand-reference-2026-10-19.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/brand-reference-grupo-arqueo.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/browser-validation.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/clean-install-validation.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/contracts-0.4.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/contracts.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/demo.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/external-verification-history-v0.3.json",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/external-verification-v0.3.json",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/install-validation.json",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/iphan-verification.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/matrix.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/migration.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/openapi.json",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/original-test-preservation.json",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/plan-0.4.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/plan-sei-public-discovery.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/public-demo.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/queue.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/regression-v0.3-initial.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/release-0.3.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/release-0.4.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/release-0.5.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/research-scope-0.4.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/sei-public-discovery-evidence-2026-10-19.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/TODO-0.4.md",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/validation-0.2.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/validation-publish-demo-final.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/validation-publish-demo.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/validation-v0.3.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/validation.txt",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.6/biblioteca.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.6/coleta-mobile.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.6/coleta.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.6/configuracoes.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.7/biblioteca.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.7/coleta-mobile.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.7/coleta.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.7/configuracoes.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/screenshots-0.7/participantes.png",
+      "status": "added"
+    },
+    {
+      "path": "docs/legacy/screenshots/overview.png",
+      "status": "added"
+    }
+  ]
+}

@@ -11,7 +11,7 @@ from email.message import Message
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit, urljoin, unquote, quote
 
-MAX_BYTES=20*1024*1024
+MAX_BYTES=128*1024*1024
 TIMEOUT=15
 MAX_REDIRECTS=5
 DEFAULT_HOSTS=('www.gov.br','portal.iphan.gov.br','sei.iphan.gov.br')
@@ -93,7 +93,7 @@ def request_once(url,ip,guard):
         length=headers.get('content-length')
         if length:
             try:
-                if int(length)>MAX_BYTES: raise FetchError('file_too_large','Limite de download de 20 MiB; importe versão reduzida')
+                if int(length)>MAX_BYTES: raise FetchError('file_too_large','Limite de download de 128 MiB; importe versão reduzida')
             except ValueError: raise FetchError('invalid_response','Resposta da origem inválida')
         if headers.get('content-encoding','identity') not in ('identity',''): raise FetchError('unsupported_encoding','Resposta comprimida não suportada; importe manualmente')
         body=bytearray();deadline=time.monotonic()+30
@@ -103,7 +103,7 @@ def request_once(url,ip,guard):
             chunk=response.read(65536)
             if not chunk: break
             body.extend(chunk)
-            if len(body)>MAX_BYTES: raise FetchError('file_too_large','Limite de download de 20 MiB')
+            if len(body)>MAX_BYTES: raise FetchError('file_too_large','Limite de download de 128 MiB')
         return response.status,headers,bytes(body)
     except FetchError: raise
     except (OSError,http.client.HTTPException): raise FetchError('network_unavailable','Falha de conexão à origem; tente depois ou importe manualmente')
@@ -127,23 +127,21 @@ def fetch(url,guard=lambda:None):
         if status==404: raise FetchError('not_found','Link não encontrado; corrija ou importe manualmente')
         if status!=200: raise FetchError('origin_unavailable','Origem indisponível; tente depois ou importe manualmente')
         content_type=headers.get('content-type','').split(';')[0].lower()
+        import archive_policy
         lower=body[:65536].lower()
-        if content_type=='text/html' or lower.lstrip().startswith((b'<!doctype html',b'<html')):
-            if any(word in lower for word in (b'captcha',b'type="password"',b"type='password'",b'login')):
-                raise FetchError('access_barrier','Página de login/CAPTCHA recebida; importe manualmente, sem contornar controles')
-            raise FetchError('page_not_document','O link aponta para uma página; forneça o link direto do documento ou importe manualmente')
-        if body.startswith(b'%PDF-'): mime='application/pdf'
-        elif content_type in ('text/plain','text/csv'):
-            try: body.decode('utf-8')
-            except UnicodeDecodeError: raise FetchError('unsupported_document','Texto precisa estar em UTF-8; importe versão compatível')
-            mime='text/plain'
-        else: raise FetchError('unsupported_document','Resposta não é PDF ou texto verificado; importe formato compatível')
-        if not body: raise FetchError('empty_document','Documento vazio recebido')
         message=Message();message['Content-Disposition']=headers.get('content-disposition','')
-        original_name=message.get_filename() or unquote(parsed.path.rsplit('/',1)[-1]) or 'document'
-        original_name=str(original_name)[:300]
+        original_name=str(message.get_filename() or unquote(parsed.path.rsplit('/',1)[-1]) or 'document')[:300]
         name=''.join(ch for ch in original_name.replace('/','_').replace('\\','_') if ord(ch)>=32 and ord(ch)!=127)[:270] or 'document'
-        extension='.pdf' if mime=='application/pdf' else '.txt'
-        if PurePosixPath(name).suffix.lower() not in (('.pdf',) if mime=='application/pdf' else ('.txt','.csv')): name+=extension
+        native_html=parsed.hostname=='sei.iphan.gov.br' and parsed.path=='/sei/modulos/pesquisa/md_pesq_documento_consulta_externa.php'
+        if content_type=='text/html' or lower.lstrip().startswith((b'<!doctype html',b'<html')):
+            if any(word in lower for word in (b'captcha',b'type="password"',b"type='password'")):
+                raise FetchError('access_barrier','Página de login/CAPTCHA; importe manualmente sem contornar controles')
+            if not native_html: raise FetchError('page_not_document','Página não documental; informe link direto')
+            if not name.lower().endswith(('.html','.htm')): name+='.html'
+        if PurePosixPath(name).suffix.lower() in ('.php','') and content_type in ('text/plain','text/csv'): name+='.csv' if content_type=='text/csv' else '.txt'
+        try: mime=archive_policy.detect(body,name,allow_html=native_html)
+        except ValueError: raise FetchError('unsupported_document','Formato inválido ou não suportado para preservação')
+        extension=next((ext for ext,value in archive_policy.MIMES.items() if value==mime),'.bin')
+        if archive_policy.MIMES.get(PurePosixPath(name).suffix.lower())!=mime: name+=extension
         return {'data':body,'mime':mime,'name':name,'original_name':original_name,'final_url':current,'source_url':url}
     raise FetchError('redirect_limit','Limite de redirecionamentos')

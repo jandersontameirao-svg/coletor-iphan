@@ -15,7 +15,7 @@ from fastapi import HTTPException
 
 stop = threading.Event()
 log = logging.getLogger("collector.worker")
-BATCH_QUOTA_BYTES = 100 * 1024 * 1024
+BATCH_QUOTA_BYTES = 2 * 1024 * 1024 * 1024
 MAX_DISCOVERED_DOCUMENTS_PER_JOB = 25_000
 
 
@@ -102,6 +102,7 @@ def _discover_process_page(job, item, user, keeper):
             with app.db() as c:
                 app.process_access(c, item["process_id"], user, "operate")
         page = sei_public.fetch_process_page(item["url"], keeper.guard)
+        page_blob=app.put_blob(page['_raw_html'],'pagina_publica_sei.html') if page.get('_raw_html') else None
         keeper.guard()
         with app.db() as c:
             c.execute("BEGIN IMMEDIATE")
@@ -117,6 +118,9 @@ def _discover_process_page(job, item, user, keeper):
                 process_id = process["id"]
             else:
                 process_id = app.ensure_discovered_process(c, page["number"], page["title"], user)
+            if page_blob:
+                c.execute('INSERT OR IGNORE INTO blobs VALUES(?,?,?)',page_blob)
+                c.execute('INSERT INTO source_snapshots VALUES(?,?,?,?,?)',(app.uid(),process_id,page['source_url'],page_blob[0],time.time()))
             existing = c.execute("SELECT 1 FROM sei_process_pages WHERE parent_item_id=?", (current["id"],)).fetchone()
             task_limit_reached = False
             if not existing:
@@ -156,8 +160,8 @@ def _discover_process_page(job, item, user, keeper):
                 detail += f"; limite de {sei_public.MAX_DOCUMENTS_PER_PROCESS} itens atingido"
             if task_limit_reached:
                 detail += f"; limite de {MAX_DISCOVERED_DOCUMENTS_PER_JOB} documentos por tarefa atingido, envie esta página em nova tarefa para continuar"
-            status = "waiting_for_user" if task_limit_reached else "process_discovered"
-            c.execute("UPDATE link_items SET status=?,process_id=?,detail=?,metadata=? WHERE id=?", (status, process_id, detail, json.dumps({"number": page["number"], "title": page["title"], "task_limit_reached": task_limit_reached}, ensure_ascii=False, separators=(",", ":")), current["id"]))
+            status = "waiting_for_user" if task_limit_reached or page["truncated"] else "process_discovered"
+            c.execute("UPDATE link_items SET status=?,process_id=?,detail=?,metadata=? WHERE id=?", (status, process_id, detail, json.dumps({"number": page["number"], "title": page["title"], "task_limit_reached": task_limit_reached, "truncated": page["truncated"]}, ensure_ascii=False, separators=(",", ":")), current["id"]))
             app.event(c, user.get("_actor_id", user["id"]), "collection.process_page.discovered", current["id"])
     except safe_fetch.FetchError as exc:
         _set_waiting(job, item, user, keeper, exc.code, exc.action)
@@ -183,6 +187,8 @@ def _download_document(job, item, user, keeper):
             raise safe_fetch.FetchError("process_required", "Cadastre ou selecione processo e informe process_id na retomada; não foi realizado acesso externo")
         with app.db() as c:
             app.process_access(c, item["process_id"], user, "operate")
+        if _metadata(item).get('access')=='restricted':
+            raise safe_fetch.FetchError('no_public_document_url','Item sem link documental público; use importação manual autorizada')
         data = safe_fetch.fetch(item["url"], keeper.guard)
         keeper.guard()
         with app.db() as c:
@@ -190,9 +196,11 @@ def _download_document(job, item, user, keeper):
         if total + len(data["data"]) > BATCH_QUOTA_BYTES:
             raise safe_fetch.FetchError("batch_quota", "Limite de 100 MiB por tarefa; divida a lista")
         metadata = _metadata(item)
+        if metadata.get('access')=='restricted':
+            raise safe_fetch.FetchError('no_public_document_url','Item sem link documental público; use importação manual autorizada')
         name = sei_public.document_filename(metadata, data) if item.get("kind") == "sei_document" else data["name"]
         blob = app.put_blob(data["data"], name)
-        original_name = item.get("display_name") or data.get("original_name", data["name"])
+        original_name = data.get("original_name", data["name"])
         with app.db() as c:
             c.execute("BEGIN IMMEDIATE")
             if not task_queue.held(c, job):
@@ -200,7 +208,7 @@ def _download_document(job, item, user, keeper):
             total = c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')", (job["id"],)).fetchone()[0]
             if total + blob[2] > BATCH_QUOTA_BYTES:
                 raise safe_fetch.FetchError("batch_quota", "Limite de 100 MiB por tarefa; divida a lista")
-            result = app.persist_document(c, item["process_id"], name, item["url"], user, blob, from_link=True, original_name=original_name)
+            result = app.persist_document(c, item["process_id"], name, item["url"], user, blob, from_link=True, original_name=original_name, external_key=metadata.get("document_number"))
             detail = "Documento público obtido; extração é etapa separada" if item.get("kind") == "sei_document" else "Documento obtido; extração é etapa separada"
             c.execute("UPDATE link_items SET status=?,revision_id=?,detail=? WHERE id=?", ("downloaded" if result["changed"] else "already_exists", result["revision_id"], detail, item["id"]))
             c.execute("INSERT INTO link_captures VALUES(?,?,?,?,?,?,?)", (app.uid(), item["id"], item["url"], data["final_url"], result["sha256"], data["mime"], time.time()))
@@ -249,7 +257,7 @@ def process_links(job, user, keeper):
 def run_once(worker_id="local-worker"):
     job = task_queue.claim(app.db, app.event, worker_id)
     if not job:
-        return False
+        return False if app.DEMO_MODE else (app.sharepoint_store.sync_once(app) or app.market_domain.run_once(app))
     run_id = None
     try:
         with LeaseKeeper(job) as keeper:

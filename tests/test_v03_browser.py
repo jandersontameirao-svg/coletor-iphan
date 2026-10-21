@@ -13,6 +13,7 @@ from support import Fixture
 import app
 
 class BrowserTests(Fixture):
+    @unittest.skipIf(getattr(app.app, 'version', '').startswith('0.7.'), 'Interface legada substituída pela ponte 0.7; E2E dedicado em scripts/browser_bridge.py')
     @unittest.skipUnless(shutil.which('chromium'),'Chromium não instalado; teste E2E pendente')
     def test_navigation_upload_worker_evidence_and_logout(self):
         try: from playwright.sync_api import sync_playwright, expect

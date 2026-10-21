@@ -6,10 +6,11 @@ import subprocess
 import sys
 import tempfile
 import time
+import process_limits
 from fastapi import HTTPException
 
 TOOL='native-text'
-VERSION='pypdf-6.10.0/utf8-v3-formats-ocr'
+VERSION='pypdf-6.21.1/utf8-v4-formats-ocr-html'
 TIME_LIMIT=35
 MEMORY_BYTES=512*1024*1024
 CPU_SECONDS=30
@@ -23,6 +24,7 @@ def parse(path,mime,digest,guard=lambda:None):
     child_env={k:v for k,v in os.environ.items() if k in ('PATH','LANG','LC_ALL','PYTHONPATH','VIRTUAL_ENV')}
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
         proc=subprocess.Popen([sys.executable,str(script),str(path),mime,digest,str(MEMORY_BYTES),str(CPU_SECONDS)],stdout=output,stderr=errors,env=child_env,start_new_session=True)
+        close_limits=process_limits.attach(proc,MEMORY_BYTES,CPU_SECONDS)
         deadline=time.monotonic()+TIME_LIMIT
         try:
             while proc.poll() is None:
@@ -42,3 +44,4 @@ def parse(path,mime,digest,guard=lambda:None):
         finally:
             if proc.poll() is None: proc.kill()
             proc.wait()
+            close_limits()

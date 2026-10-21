@@ -1,0 +1,15 @@
+﻿id;requisito;implementacao;validacao
+A01;ACL de tarefas descobertas;authorize_job e job_authorized revalidam processos filhos;test_bridge
+A02;Distancias geograficas;distancia a segmentos e arestas;test_bridge
+A03;Originais espaciais;persistencia documental canonica em advanced_routes;test_geo_formats
+A04;Retomada restrita;sem requisicao do placeholder;test_bridge
+A05;Truncamento;waiting_for_user explicito;test_bridge
+A06;Analise atual;SQL exige revisao corrente;test_bridge
+A07;Buracos e SRC;aneis internos e PRJ obrigatorio;test_bridge
+A08;Metadados;nome de servidor preservado e datas iguais tratadas;test_sei_public e test_bridge
+A09;Resolucao manual;pais de descoberta nao impedem conclusao;test_bridge
+A10;Formatos;HTML e compactados preservados;test_bridge
+B01;RAIPI;categoria e pasta propria;test_bridge e browser_bridge
+B02;SharePoint;OAuth Graph fila e verificacao de bytes;fixtures locais - real pendente
+B03;Interface ponte;quatro abas e biblioteca;browser_bridge
+B04;Empacotamento;Dockerfile Compose bootstrap lock;instalacao local - container pendente

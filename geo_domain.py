@@ -189,7 +189,9 @@ def parse_kml(data, filename='resource.kml'):
             elif tag == 'linestring':
                 geometries.append({'type': 'LineString', 'coordinates': coords})
             else:
-                geometries.extend(_polygon_geometries([coords]))
+                boundaries=[n for n in node.iter() if _local(n) in ('outerboundaryis','innerboundaryis')]
+                rings=[_coordinates(_text(boundary,'coordinates')) for boundary in boundaries]
+                geometries.extend(_polygon_geometries(rings or [coords]))
         if geometries:
             features.append(_feature(index, title, geometries))
     if not features:
@@ -399,7 +401,7 @@ def _shapefile_files(data, filename):
 
 def _check_prj(prj):
     if not prj:
-        return 'EPSG:4326'
+        raise ValueError('Shapefile sem PRJ: informe SRC WGS84 explícito antes da importação')
     text = prj.decode('latin-1', 'replace').upper()
     if any(token in text for token in ('WGS_1984', 'WGS 84', 'EPSG","4326', '4326', 'CRS84')):
         return 'EPSG:4326'
@@ -525,6 +527,11 @@ def feature_distance_m(feature, point):
         if geometry.get('type') == 'Point' and coordinates:
             coordinates = [coordinates]
         distances.extend(haversine_m(point, coordinate) for coordinate in coordinates)
+        if geometry.get('type') in ('LineString','Polygon'):
+            segments=list(zip(coordinates,coordinates[1:]))
+            if geometry.get('type')=='Polygon' and coordinates: segments.append((coordinates[-1],coordinates[0]))
+            for hole in geometry.get('holes',[]): segments.extend(zip(hole,hole[1:]+hole[:1]))
+            distances.extend(segment_distance_m(point,a,b) for a,b in segments)
         if geometry.get('type') == 'Polygon' and len(coordinates) >= 3:
             in_hole = any(_point_in_polygon(point, hole) for hole in geometry.get('holes', []))
             inside = inside or (_point_in_polygon(point, coordinates) and not in_hole)
@@ -547,3 +554,16 @@ def search(features, latitude, longitude, radius_m: float = 0):
 
 def dumps_features(features):
     return json.dumps(features, ensure_ascii=False, separators=(',', ':'))
+
+
+def segment_distance_m(point,a,b):
+    """Distância sobre esfera ao arco menor, com projeção limitada ao segmento."""
+    def bearing(x,y):
+        lat1,lat2=math.radians(x[1]),math.radians(y[1]);dlon=math.radians(y[0]-x[0])
+        return math.atan2(math.sin(dlon)*math.cos(lat2),math.cos(lat1)*math.sin(lat2)-math.sin(lat1)*math.cos(lat2)*math.cos(dlon))
+    length=haversine_m(a,b)
+    if length<1e-8: return haversine_m(point,a)
+    delta=haversine_m(a,point)/EARTH_RADIUS_M;theta=bearing(a,point)-bearing(a,b)
+    along=math.atan2(math.sin(delta)*math.cos(theta),math.cos(delta))*EARTH_RADIUS_M
+    if 0<=along<=length: return abs(math.asin(max(-1,min(1,math.sin(delta)*math.sin(theta)))))*EARTH_RADIUS_M
+    return min(haversine_m(point,a),haversine_m(point,b))

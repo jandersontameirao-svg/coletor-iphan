@@ -54,5 +54,7 @@ def job_authorized(c,job):
             pid=payload.get('input',{}).get('process_id')
             if pid: process_access(c,pid,user,'operate')
             elif user.get('_delegation'): return False
+            for item in c.execute('SELECT DISTINCT process_id FROM link_items WHERE job_id=? AND process_id IS NOT NULL',(job['id'],)).fetchall():
+                process_access(c,item['process_id'],user,'operate')
         return True
     except (HTTPException,KeyError): return False

@@ -18,13 +18,16 @@ import demo_mode
 import sei_domain
 import sei_public
 import document_extractors
+import archive_policy
+import sharepoint_store
+import market_domain
 from pypdf import PdfReader
 
 ROOT = Path(os.getenv('COLLECTOR_DATA', './data')).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
 (ROOT / 'blobs').mkdir(exist_ok=True)
 DB = ROOT / 'catalog.sqlite'
-app = FastAPI(title='Coletor IPHAN — fundação local', version='0.5.0')
+app = FastAPI(title='Coletor IPHAN — fundação local', version='0.7.0')
 DEMO_MODE = os.getenv('COLLECTOR_DEMO_MODE', '').lower() in ('1', 'true', 'yes')
 ALLOW_EMBED = os.getenv('COLLECTOR_ALLOW_EMBED', '').lower() in ('1', 'true', 'yes')
 EMBEDDED_WORKER = os.getenv('COLLECTOR_EMBEDDED_WORKER', '').lower() in ('1', 'true', 'yes')
@@ -252,35 +255,22 @@ def project(body: ProjectInput,user=Depends(identity)):
     return {'id':pid,'code':code}
 
 def put_blob(data, name=''):
-    if not data or len(data)>20*1024*1024: raise HTTPException(422,'Arquivo vazio ou acima de 20 MiB')
-    suffix=Path(name).suffix.lower()
-    mime='application/pdf' if data.startswith(b'%PDF-') else None
-    if mime is None and suffix in ('.docx','.xlsx'):
-        try:
-            with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                names=set(archive.namelist())
-                required='word/document.xml' if suffix=='.docx' else 'xl/workbook.xml'
-                if required not in names: raise HTTPException(415,'Arquivo Office inválido')
-            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document' if suffix=='.docx' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        except zipfile.BadZipFile as exc:
-            raise HTTPException(415,'Arquivo Office inválido') from exc
-    elif suffix=='.csv':
-        mime='text/csv'
-    if mime is None:
-        mime='text/plain'
-    if mime in ('text/plain','text/csv'):
-        try: data.decode('utf-8')
-        except UnicodeDecodeError: raise HTTPException(415,'Envie PDF, CSV, DOCX, XLSX ou texto UTF-8')
-        if data.lstrip()[:30].lower().startswith((b'<html',b'<!doctype html')): raise HTTPException(415,'Página HTML não é documento')
+    try: mime=archive_policy.detect(data,name,allow_html=Path(name).suffix.lower() in ('.html','.htm'))
+    except ValueError as exc: raise HTTPException(415,str(exc))
     digest=hashlib.sha256(data).hexdigest();path=ROOT/'blobs'/digest
     temporary=ROOT/'blobs'/('.'+uid())
     with temporary.open('wb') as f:
         f.write(data);f.flush();os.fsync(f.fileno())
-    os.replace(temporary,path)
+    try:
+        try: os.link(temporary,path)
+        except FileExistsError:
+            if hashlib.sha256(path.read_bytes()).hexdigest()!=digest: os.replace(temporary,path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return digest,mime,len(data)
 
 
-def persist_document(c,pid,name,source,user,blob,from_link=False,original_name=None):
+def persist_document(c,pid,name,source,user,blob,from_link=False,original_name=None,external_key=None):
     pid=process_access(c,pid,user,'operate')['id']
     original_name=original_name or name
     digest,mime,size=blob
@@ -292,11 +282,17 @@ def persist_document(c,pid,name,source,user,blob,from_link=False,original_name=N
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ('','.docx'),
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ('','.xlsx'),
     }
+    for extension,kind in archive_policy.MIMES.items():
+        allowed_suffixes[kind]=tuple(set(allowed_suffixes.get(kind,('',)))|{extension})
     if suffix not in allowed_suffixes.get(mime, ('',)):
         raise HTTPException(415,'Extensão não corresponde ao conteúdo verificado')
     c.execute('INSERT OR IGNORE INTO blobs VALUES(?,?,?)',(digest,size,mime))
     if from_link:
         doc=c.execute('SELECT document_id AS id FROM document_sources WHERE process_id=? AND source_url=?',(pid,source)).fetchone()
+        if external_key:
+            keyed=c.execute('SELECT document_id AS id FROM document_keys WHERE process_id=? AND external_key=?',(pid,external_key)).fetchone()
+            if keyed: doc=keyed
+            elif doc and c.execute('SELECT 1 FROM document_keys WHERE document_id=?',(doc['id'],)).fetchone(): doc=None
         if not doc and c.execute('SELECT id FROM documents WHERE process_id=? AND name=?',(pid,name)).fetchone():
             extension=Path(name).suffix
             stem=name[:-len(extension)] if extension else name
@@ -305,7 +301,10 @@ def persist_document(c,pid,name,source,user,blob,from_link=False,original_name=N
     did=doc['id'] if doc else uid()
     if not doc:
         c.execute('INSERT INTO documents VALUES(?,?,?)',(did,pid,name))
-        if from_link: c.execute('INSERT INTO document_sources VALUES(?,?,?)',(pid,source,did))
+        if from_link: c.execute('INSERT OR IGNORE INTO document_sources VALUES(?,?,?)',(pid,source,did))
+    if from_link:
+        c.execute('INSERT OR IGNORE INTO document_sources VALUES(?,?,?)',(pid,source,did))
+        if external_key: c.execute('INSERT OR IGNORE INTO document_keys VALUES(?,?,?)',(pid,external_key,did))
     last=c.execute('SELECT * FROM revisions WHERE document_id=? ORDER BY rowid DESC LIMIT 1',(did,)).fetchone()
     rid=last['id'] if last and last['blob']==digest else uid()
     changed=not last or last['blob']!=digest
@@ -313,13 +312,23 @@ def persist_document(c,pid,name,source,user,blob,from_link=False,original_name=N
         c.execute('INSERT INTO revisions VALUES(?,?,?,?,?)',(rid,did,digest,last['id'] if last else None,time.time()))
         event(c,user.get('_actor_id',user['id']),'document.revision.created',rid)
     c.execute('INSERT INTO occurrences VALUES(?,?,?,?,?)',(uid(),rid,source,(original_name or name)[:300],time.time()))
+    current=c.execute('SELECT * FROM archive_labels WHERE document_id=?',(did,)).fetchone()
+    if not current or current['method']!='human_review':
+        raw=(ROOT/'blobs'/digest).read_bytes() if Path(name).suffix.lower()=='.zip' else None
+        label,method=archive_policy.category(original_name,name,raw)
+        c.execute('INSERT OR REPLACE INTO archive_labels VALUES(?,?,?,?,?)',(did,label,method,user['id'],time.time()))
+    else: label=current['category']
+    if not DEMO_MODE:
+        sharepoint_store.queue_revision(c,rid,user,label,uid)
+        market_domain.enqueue(c,rid,user,uid)
     return {'document_id':did,'revision_id':rid,'sha256':digest,'changed':changed}
+
 
 
 async def read_upload(request):
     data=bytearray()
     async for chunk in request.stream():
-        if len(data)+len(chunk)>20*1024*1024: raise HTTPException(413,'Limite de 20 MiB')
+        if len(data)+len(chunk)>archive_policy.MAX_BYTES: raise HTTPException(413,'Limite de 128 MiB')
         data.extend(chunk)
     return bytes(data)
 
@@ -503,6 +512,10 @@ def authorize_job(c,row,user,permission='read'):
     if payload.get('operation')=='extract_revision': revision_access(c,payload['input']['revision_id'],user,permission)
     elif payload.get('input',{}).get('process_id'): process_access(c,payload['input']['process_id'],user,permission)
     elif row['owner']!=user['id']: raise HTTPException(404)
+    # Tarefas sem associação inicial podem descobrir vários processos.
+    for item in c.execute('SELECT DISTINCT process_id FROM link_items WHERE job_id=? AND process_id IS NOT NULL',(row['id'],)).fetchall():
+        process_access(c,item['process_id'],user,permission)
+
 
 
 @app.get('/v1/collection-jobs')
@@ -581,10 +594,15 @@ def resume(jid: str,body: ResumeInput | None=None,user=Depends(identity)):
                 pid=process_access(c,body.process_id,user,'operate')['id']
                 old=payload['input'].get('process_id')
                 if old and process_access(c,old,user)['id']!=pid: raise HTTPException(409,'Não altere o processo de uma tarefa já vinculada')
+                for attached in c.execute('SELECT DISTINCT process_id FROM link_items WHERE job_id=? AND process_id IS NOT NULL',(jid,)).fetchall():
+                    if authorization.resolve(c,attached['process_id'])['id']!=pid: raise HTTPException(409,'Não remapeie processos já descobertos; retome sem alterar a associação')
                 payload['input']['process_id']=pid
                 c.execute('UPDATE link_items SET process_id=? WHERE job_id=? AND revision_id IS NULL',(pid,jid))
             if body.retry_pending:
-                c.execute("UPDATE link_items SET status='received',detail='Retomada solicitada' WHERE job_id=? AND status='waiting_for_user' AND revision_id IS NULL",(jid,))
+                for item in c.execute("SELECT * FROM link_items WHERE job_id=? AND status='waiting_for_user' AND revision_id IS NULL",(jid,)).fetchall():
+                    metadata=json.loads(item['metadata'] or '{}')
+                    if metadata.get('access')=='restricted' or metadata.get('truncated') or metadata.get('task_limit_reached'): continue
+                    c.execute("UPDATE link_items SET status='received',detail='Retomada solicitada' WHERE id=?",(item['id'],))
         c.execute("UPDATE jobs SET status='queued',available_at=0,input=?,detail='Retomada solicitada; resultados confirmados preservados' WHERE id=?",(json.dumps(payload,sort_keys=True,separators=(',',':')),jid))
         event(c,user.get('_actor_id',user['id']),'collection.resumed',jid)
     return {'job_id':jid,'status_url':f'/v1/collection-jobs/{jid}'}
@@ -616,19 +634,22 @@ async def manual_resolution(jid: str,item_id: str,request: Request,name: str,use
         if item['revision_id']: raise HTTPException(409,'Item já resolvido')
         total=c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')",(jid,)).fetchone()[0]
         if total+blob[2]>worker.BATCH_QUOTA_BYTES: raise HTTPException(413,'Limite de originais confirmados por tarefa')
-        result=persist_document(c,item['process_id'],name,item['url'],user,blob,from_link=True)
+        metadata=json.loads(item['metadata'] or '{}')
+        external_key=metadata.get('document_number')
+        logical_name=(str(external_key)+' — '+name)[:300] if external_key and not name.startswith(str(external_key)) else name
+        result=persist_document(c,item['process_id'],logical_name,item['url'],user,blob,from_link=True,original_name=name,external_key=external_key)
         c.execute("UPDATE link_items SET status='manual_imported',revision_id=?,detail='Importado manualmente com origem preservada' WHERE id=?",(result['revision_id'],item_id))
         event(c,user.get('_actor_id',user['id']),'collection.item.manual_imported',item_id)
         import worker
         checkpoint=worker.link_summary(c,jid)
-        remaining=c.execute('SELECT count(*) FROM link_items WHERE job_id=? AND revision_id IS NULL',(jid,)).fetchone()[0]
+        remaining=c.execute("SELECT count(*) FROM link_items WHERE job_id=? AND revision_id IS NULL AND status NOT IN ('process_discovered','duplicate')",(jid,)).fetchone()[0]
         c.execute('UPDATE jobs SET checkpoint=?,status=?,detail=? WHERE id=?',(json.dumps(checkpoint),'completed' if not remaining else row['status'],'Todos os itens resolvidos por obtenção/importação' if not remaining else 'Importação registrada; outras pendências preservadas',jid))
         if not remaining: event(c,user.get('_actor_id',user['id']),'collection.completed',jid)
         return result
 
 @app.get('/v1/capabilities')
 def capabilities(user=Depends(identity)):
-    return {'manual_import':['pdf','txt','csv','docx','xlsx'],'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'public_sei_process_pages':True,'public_sei_document_discovery':True,'portal_search':False,'direct_download_formats':['pdf','txt'],'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_formats':['kml','kmz','shp','shapefile_zip','geojson','json','gpx'],'spatial_srs':['EPSG:4326'],'process_analysis_dashboard':True,'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':False,'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.5.0'}
+    return {'manual_import':sorted(archive_policy.MIMES),'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'public_sei_process_pages':True,'public_sei_document_discovery':True,'portal_search':False,'direct_download_formats':sorted(archive_policy.MIMES),'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_formats':['kml','kmz','shp','shapefile_zip','geojson','json','gpx'],'spatial_srs':['EPSG:4326'],'process_analysis_dashboard':True,'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':False,'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.7.0'}
 
 @app.get('/v1/me')
 def me(user=Depends(identity)):
@@ -637,7 +658,7 @@ def me(user=Depends(identity)):
 
 @app.get('/_app/health')
 def health():
-    return {'status':'ok','version':'0.5.0','demo_mode':DEMO_MODE,'embedded_worker':EMBEDDED_WORKER}
+    return {'status':'ok','version':'0.7.0','demo_mode':DEMO_MODE,'embedded_worker':EMBEDDED_WORKER}
 
 
 @app.post('/v1/demo-session')
@@ -653,7 +674,7 @@ def manus_routes():
 
 @app.get('/assets/{name}')
 def assets(name: str):
-    allowed={'ui.js': 'text/javascript', 'advanced_ui.js': 'text/javascript', 'public_sei_ui.js': 'text/javascript', 'analysis_ui.js': 'text/javascript', 'styles.css': 'text/css', 'group-arqueo-logo.png': 'image/png'}
+    allowed={'ui.js': 'text/javascript', 'bridge_ui.js':'text/javascript', 'bridge.css':'text/css', 'advanced_ui.js': 'text/javascript', 'public_sei_ui.js': 'text/javascript', 'analysis_ui.js': 'text/javascript', 'styles.css': 'text/css', 'group-arqueo-logo.png': 'image/png'}
     if name not in allowed: raise HTTPException(404)
     return FileResponse(Path(__file__).with_name(name),media_type=allowed[name])
 
@@ -715,7 +736,7 @@ async def response_policy(request: Request,call_next):
 
 @app.get('/',response_class=HTMLResponse)
 def ui():
-    page = Path(__file__).with_name('index.html').read_text()
+    page = Path(__file__).with_name('bridge.html').read_text(encoding='utf-8')
     if DEMO_MODE:
         replacements = {
             '{{LOGIN_LABEL}}': 'AMBIENTE DE CONSTRUÇÃO',
@@ -735,6 +756,12 @@ def ui():
     for marker, value in replacements.items():
         page = page.replace(marker, value)
     return HTMLResponse(page)
+
+import sys
+import bridge_routes
+bridge_routes.register(sys.modules[__name__])
+import market_routes
+market_routes.register(sys.modules[__name__])
 
 import access_routes
 import catalog_routes

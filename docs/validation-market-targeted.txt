@@ -1,0 +1,19 @@
+C:\Users\jande\Documents\Codex\2026-10-20\aten\work\clean-deps\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+test_administrative_technical_crossing_preserves_evidence (test_market.MarketTests.test_administrative_technical_crossing_preserves_evidence) ... ok
+test_explicit_roles_do_not_infer_client_from_mentions (test_market.MarketTests.test_explicit_roles_do_not_infer_client_from_mentions) ... ok
+test_html_fields_are_extracted_without_running_scripts (test_market.MarketTests.test_html_fields_are_extracted_without_running_scripts) ... ok
+test_new_revision_preserves_history_without_current_old_assertions (test_market.MarketTests.test_new_revision_preserves_history_without_current_old_assertions) ... ok
+test_numeric_identifier_and_contacts_are_conservative (test_market.MarketTests.test_numeric_identifier_and_contacts_are_conservative) ... ok
+test_pdf_source_retains_real_page (test_market.MarketTests.test_pdf_source_retains_real_page) ... ok
+test_rejected_participation_is_excluded_from_crossing (test_market.MarketTests.test_rejected_participation_is_excluded_from_crossing) ... ok
+test_reprocessing_is_explicit_and_previous_results_immutable (test_market.MarketTests.test_reprocessing_is_explicit_and_previous_results_immutable) ... ok
+test_review_and_revocation_never_expose_fact (test_market.MarketTests.test_review_and_revocation_never_expose_fact) ... ok
+test_revocation_during_processing_fences_commit (test_market.MarketTests.test_revocation_during_processing_fences_commit) ... ok
+test_same_names_without_id_are_candidates (test_market.MarketTests.test_same_names_without_id_are_candidates) ... ok
+test_unsupported_archive_does_not_block_original_or_transfer (test_market.MarketTests.test_unsupported_archive_does_not_block_original_or_transfer) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 31.358s
+
+OK

@@ -57,7 +57,7 @@ class V04ScopeTests(Fixture):
         capabilities = self.client.get('/v1/capabilities', headers=self.h)
         self.assertEqual(capabilities.status_code, 200)
         data = capabilities.json()
-        self.assertEqual(data['version'], '0.5.0')
+        self.assertEqual(data['version'], '0.7.0')
         self.assertTrue(data['spatial_search'])
         self.assertTrue(data['knowledge_assertions'])
         self.assertTrue(data['public_sei_process_pages'])

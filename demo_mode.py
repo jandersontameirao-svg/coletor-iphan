@@ -17,7 +17,7 @@ DEMO_ASSERTION_ID = "demo-assertion-v04"
 def seed(db, root, password_hash, event):
     """Cria somente registros sintéticos, de modo idempotente, para construção pública."""
     content = (
-        "Registro sintético de demonstração do Coletor IPHAN 0.5. "
+        "Registro sintético de demonstração do Coletor IPHAN 0.7. "
         "Este conteúdo não representa processo, documento, coordenada ou parecer real."
     ).encode("utf-8")
     digest = hashlib.sha256(content).hexdigest()

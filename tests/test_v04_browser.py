@@ -12,6 +12,7 @@ from support import app
 
 
 class V04BrowserTests(unittest.TestCase):
+    @unittest.skipIf(getattr(app.app, 'version', '').startswith('0.7.'), 'Interface 0.4 substituída pela ponte 0.7; E2E dedicado em scripts/browser_bridge.py')
     @unittest.skipUnless(shutil.which('chromium'), 'Chromium não instalado; E2E 0.4 pendente')
     def test_advanced_navigation_loads_without_page_errors(self):
         try:

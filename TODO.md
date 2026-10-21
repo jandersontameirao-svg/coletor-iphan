@@ -1,35 +1,38 @@
-# TODO — Coletor IPHAN 0.5
+# TODO — Coletor IPHAN 0.7
 
-## Recursos entregues
+## Entregue
 
-- [x] Manter processos canônicos, documentos, revisões, evidências, origem, download protegido, extração assíncrona, fila persistente e armazenamento por SHA-256.
-- [x] Manter ACL por processo com permissões de leitura, operação, revisão e administração, incluindo grupos, contas de serviço, delegação, revogação e auditoria.
-- [x] Aceitar links explícitos e importação manual autorizada. Links para a página pública SEI/IPHAN fornecidos pelo usuário são lidos para identificar documentos que a própria página expõe publicamente; não há pesquisa de processo por número ou varredura do portal.
-- [x] Registrar afirmações de conhecimento somente quando vinculadas a evidência autorizada, com revisão humana, validação, rejeição, conflito e relações rastreáveis.
-- [x] Importar e versionar KML/KMZ, Shapefile ZIP, GeoJSON/JSON e GPX em WGS84/EPSG:4326 e realizar pesquisa espacial por ponto e entorno em metros.
-- [x] Importar PDF, TXT, CSV, DOCX e XLSX com validação de conteúdo; DOCX/XLSX não executam macros ou fórmulas.
-- [x] Tentar OCR real de PDF digitalizado quando `tesseract` e `pdftoppm` estiverem instalados; manter `needs_ocr` sem evidência fictícia quando não houver motor/resultado.
-- [x] Exibir painel de Processos analisados com status calculado por extração, classificação, evidência e revisão pendente.
-- [x] Manter contratos de integração sem declarar homologação real com IPHAN, ATENA ou Geoportal.
-- [x] Aplicar a marca local e o padrão visual do Grupo Arqueo à interface do Coletor.
-- [x] Configurar container Python 3.12 com `PORT`, health check em `/_app/health`, manifesto de rotas e suporte ao Preview Webdev.
+- [x] Manter processos canônicos, documentos, revisões, evidências, proveniência, ACL, grupos, contas de serviço, delegação, auditoria e fila persistente.
+- [x] Aceitar links HTTPS explícitos, páginas públicas SEI/IPHAN fornecidas e importação manual, sem pesquisa automática por número, login externo ou CAPTCHA.
+- [x] Preservar originais no cache local por SHA-256 e disponibilizar revisão, download autorizado e histórico.
+- [x] Importar PDF, HTML documental SEI, TXT/CSV, DOCX/XLSX, imagens, ZIP/RAR/7z e formatos geográficos conforme a política de arquivo.
+- [x] Versionar KML/KMZ, Shapefile ZIP, GeoJSON/JSON e GPX em WGS84/EPSG:4326; manter componentes geográficos juntos e consultar entorno em metros.
+- [x] Manter conhecimento rastreável e processos analisados com evidências, revisão humana, conflitos e status explícitos.
+- [x] Organizar a interface operacional em Coleta, Acompanhamento, Biblioteca e Configurações.
+- [x] Classificar conservadoramente por processo em Georreferenciados, PAPIPA, RAPIPA, PAIPA, RAIPA, PGPA, RAIPI, Educação patrimonial, Outros documentos e A classificar.
+- [x] Implementar ponte SharePoint com destino configurável, device code Microsoft, tokens criptografados, validação, pastas sob demanda, upload verificado, retry, retomada, movimentação e preservação local.
+- [x] Implementar Empresas e responsáveis com papéis explícitos, CNPJ/contatos rotulados, evidências por documento/revisão/página ou unidade, revisão humana e exportação JSON.
+- [x] Manter o módulo de participantes como análise documental conservadora, sem inferência de cliente final, contrato, vínculo empregatício, prospecção ou finanças.
+- [x] Executar a suíte 0.7: 110 testes, 108 aprovados e 2 E2E históricos pulados quando Playwright não está instalado; o E2E dedicado da ponte SharePoint passou com Chromium e zero erros JavaScript.
+- [x] Validar o manifesto SHA-256 do ZIP recebido, com 132 arquivos e zero divergências.
+- [x] Adaptar o Dockerfile para respeitar `PORT` no runtime Manus.
 
-## Descoberta pública SEI
+## Checkpoint e publicação
 
-- [x] A tela de links aceita páginas públicas SEI/IPHAN fornecidas, ignora linhas não URL HTTPS, remove duplicatas e divide mais de 50 URLs em tarefas separadas.
-- [x] O worker aceita somente o endpoint público de processo SEI/IPHAN, registra processo/documentos descobertos e baixa apenas links públicos PDF/TXT verificados.
-- [x] Linhas sem link público, login, CAPTCHA, redirecionamentos indevidos, restrições e erros permanecem como pendências individuais, sem tentativa de contorno.
-- [x] A descoberta limita 1.000 documentos por página e 25.000 por tarefa; a quota existente de 100 MiB por tarefa e 20 MiB por arquivo permanece aplicada.
-- [x] A demonstração sem senha permite somente a fila de descoberta pública durante a construção, com dados efêmeros; administração e alterações operacionais continuam bloqueadas.
-
-## Entrega atual
-
-- [x] Executar testes específicos de descoberta SEI, formatos documentais, formatos geográficos, análise de processos, sintaxe e regressão integral em banco temporário: **82 testes aprovados em 20/10/2026**.
-- [x] Salvar o checkpoint atualizado no repositório canônico Manus sem incluir arquivos de rascunho não ativados.
+- [ ] Criar checkpoint Manus da versão 0.7 integrada.
 - [ ] Publicar o checkpoint confirmado no ambiente Manus.
+- [ ] Verificar health check e abertura da URL publicada após o deploy.
 
-## Limites explícitos
+## Homologações externas pendentes
 
-- [ ] PostgreSQL/PostGIS em servidor real e integrações externas reais só poderão ser declarados quando instalados e homologados.
-- [ ] Não há pesquisa de processo por número, autenticação externa, resolução de CAPTCHA ou acesso a documentos SEI sem link público.
-- [ ] O container demonstrativo armazena dados efêmeros; não deve receber credenciais ou dados operacionais reais.
+- [ ] Configurar `MICROSOFT_TENANT_ID` e `MICROSOFT_CLIENT_ID` no ambiente seguro.
+- [ ] Obter consentimento organizacional Microsoft Graph `Files.ReadWrite` e conectar uma conta autorizada.
+- [ ] Validar o link real da pasta SharePoint, criar/conferir/remover arquivo de teste e confirmar uma transferência real.
+- [ ] Medir implantação Linux/Compose, volume persistente, backup/restauração, RPO/RTO e concorrência com acervo real.
+- [ ] Homologar fontes reais IPHAN e consumidores ATENA/Geoportal, sem declarar resultado antecipadamente.
+
+## Restrições preservadas
+
+- [ ] Não usar a publicação demonstrativa para credenciais, tokens, acervo real ou produção.
+- [ ] Não acessar SharePoint real antes da autenticação e consentimento autorizados.
+- [ ] Não apagar histórico de categorias, revisões, ocorrências, transferências ou evidências.

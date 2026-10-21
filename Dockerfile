@@ -1,20 +1,11 @@
 FROM python:3.12-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    COLLECTOR_DATA=/var/lib/coletor \
-    COLLECTOR_DEMO_MODE=1 \
-    COLLECTOR_ALLOW_EMBED=1 \
-    COLLECTOR_EMBEDDED_WORKER=1
-
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 COLLECTOR_DATA=/data
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates poppler-utils tesseract-ocr tesseract-ocr-por && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY requirements.lock ./requirements.lock
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-por \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --require-hashes -r requirements.lock
-COPY . .
-RUN mkdir -p /var/lib/coletor
-
-EXPOSE 3000
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-3000}"]
+COPY requirements.lock /app/
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+RUN useradd --uid 10001 --create-home collector && mkdir /data && chown collector:collector /data
+COPY --chown=collector:collector . /app
+USER collector
+EXPOSE 8000
+CMD ["sh","-c","exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]
