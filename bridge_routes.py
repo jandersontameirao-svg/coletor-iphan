@@ -1,5 +1,6 @@
 """Interface de ponte e biblioteca de originais; consumidores seguem a mesma ACL."""
 import hashlib
+import io
 import json
 import time
 from pathlib import Path
@@ -7,6 +8,31 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 import archive_policy as policy
 import sharepoint_store as cloud
+import ai_classifier as ai
+import document_extractors as extractors
+import ocr_optional
+
+
+def _document_text(raw, mime, path):
+    """Texto determinístico para a IA ler; PDF tenta pypdf e depois OCR opcional."""
+    if mime == 'application/pdf':
+        text = ''
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(raw))
+            text = '\n'.join((page.extract_text() or '') for page in reader.pages[:40])
+        except Exception:
+            text = ''
+        if not text.strip() and ocr_optional.capability()['available']:
+            try:
+                text = '\n'.join(page for _, page in ocr_optional.extract_pdf(path))
+            except Exception:
+                text = ''
+        return text
+    try:
+        return extractors.extract(raw, mime)
+    except ValueError:
+        return ''
 
 class Destination(BaseModel):
     folder_url: str = Field(min_length=1,max_length=4096)
@@ -64,6 +90,31 @@ def register(appmod):
             c.execute("UPDATE cloud_transfers SET category=? WHERE revision_id IN (SELECT id FROM revisions WHERE document_id=?) AND status IN ('queued','waiting_for_connection','failed')",(body.category,did))
             a.event(c,user.get('_actor_id',user['id']),'archive.category.reviewed',did)
         return {'document_id':did,'category':body.category,'notice':'Classificação atualizada; arquivos já enviados preservam o caminho histórico. Use mover para reorganizá-los.'}
+
+    @app.get('/v1/bridge/ai')
+    def ai_status(user=Depends(a.identity)):
+        return ai.capability()
+
+    @app.post('/v1/bridge/documents/{did}/ai-suggest-category')
+    def ai_suggest(did: str,user=Depends(a.identity)):
+        if not ai.available(): raise HTTPException(503,'IA não configurada: defina OPENAI_API_KEY no servidor')
+        with a.db() as c:
+            d=c.execute('SELECT * FROM documents WHERE id=?',(did,)).fetchone()
+            if not d: raise HTTPException(404)
+            a.process_access(c,d['process_id'],user,'review')
+            r=c.execute('SELECT r.id,r.blob,d.name,p.title,b.mime FROM revisions r JOIN documents d ON d.id=r.document_id JOIN processes p ON p.id=d.process_id JOIN blobs b ON b.hash=r.blob WHERE r.document_id=? ORDER BY r.rowid DESC LIMIT 1',(did,)).fetchone()
+            if not r: raise HTTPException(404,'Documento sem revisão')
+        path=a.ROOT/'blobs'/r['blob']
+        try: raw=path.read_bytes()
+        except OSError: raise HTTPException(404,'Original indisponível no cache')
+        text=_document_text(raw,r['mime'],path)
+        if not (text or '').strip():
+            raise HTTPException(422,'Sem texto extraível para a IA analisar (ex.: PDF escaneado sem OCR instalado).')
+        try: result=ai.suggest_category(text,name=r['name'],title=r['title'])
+        except ai.AIError as e: raise HTTPException(502,str(e))
+        with a.db() as c:
+            a.event(c,user.get('_actor_id',user['id']),'archive.category.ai_suggested',did)
+        return {'document_id':did,**result}
 
     @app.post('/v1/bridge/documents/{did}/move',status_code=202)
     def move(did: str,user=Depends(a.identity)):

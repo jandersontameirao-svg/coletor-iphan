@@ -65,6 +65,24 @@ OpenAPI vivo em /openapi.json e interface /docs. Snapshot em docs/openapi.json. 
 
 As APIs históricas de extração/geografia/conhecimento permanecem para compatibilidade e migração, com correções da auditoria. Não têm abas no aplicativo ponte. Extração/análise não são disparadas automaticamente pela coleta. Não há integração real homologada com ATENA/Geoportal, webhooks externos ou treinamento de modelos. O contrato de leitura e os IDs já podem ser utilizados pelos consumidores.
 
+## IA opcional (sugestão de categoria)
+
+Adaptador **opcional e substituível** (OpenAI) que ajuda apenas nos casos-limite da
+classificação determinística: quando não há sigla explícita e o documento cairia em
+**A classificar**. É ativado só quando `OPENAI_API_KEY` está definido no servidor; sem a
+chave, o botão não aparece, `/v1/capabilities` retorna `ai:false` e o app segue 100%
+determinístico.
+
+Na Biblioteca, revisores veem **"Sugerir categoria (IA)"** em cada documento: a IA lê o
+texto extraído (ou OCR, se instalado), **sugere** uma categoria com justificativa e
+confiança, e o revisor decide se aplica. A IA **nunca** altera a classificação sozinha —
+a decisão final é humana, e `archive.category.ai_suggested` fica registrado no histórico.
+
+Variáveis: `OPENAI_API_KEY` (obrigatória para ativar), `OPENAI_MODEL` (padrão
+`gpt-4o-mini`), `OPENAI_BASE_URL` (opcional, para gateway compatível). A chave não é
+gravada em log nem retornada à interface. Rotas: `GET /v1/bridge/ai` e
+`POST /v1/bridge/documents/{id}/ai-suggest-category`.
+
 ## Testes e recuperação
 
 ```sh
