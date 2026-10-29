@@ -78,10 +78,14 @@ texto extraído (ou OCR, se instalado), **sugere** uma categoria com justificati
 confiança, e o revisor decide se aplica. A IA **nunca** altera a classificação sozinha —
 a decisão final é humana, e `archive.category.ai_suggested` fica registrado no histórico.
 
-Variáveis: `OPENAI_API_KEY` (obrigatória para ativar), `OPENAI_MODEL` (padrão
-`gpt-4o-mini`), `OPENAI_BASE_URL` (opcional, para gateway compatível). A chave não é
-gravada em log nem retornada à interface. Rotas: `GET /v1/bridge/ai` e
-`POST /v1/bridge/documents/{id}/ai-suggest-category`.
+Variáveis: `OPENAI_API_KEY` (obrigatória para ativar), `OPENAI_MODEL` (padrão `gpt-5.6`;
+o `gpt-4o` está sendo aposentado pela OpenAI, então o padrão usa um modelo recente —
+alternativas: `gpt-6-sol`, `gpt-5.6-terra`), `OPENAI_REASONING_EFFORT` (opcional, ex.:
+`low`, para modelos reasoning) e `OPENAI_BASE_URL` (opcional, gateway compatível). O
+adaptador ajusta o payload por família de modelo (reasoning usam `max_completion_tokens`
+e `temperature` padrão; demais usam `max_tokens`+`temperature`) e reenvia um payload
+mínimo se algum parâmetro não for aceito. A chave não é gravada em log nem retornada à
+interface. Rotas: `GET /v1/bridge/ai` e `POST /v1/bridge/documents/{id}/ai-suggest-category`.
 
 ## Testes e recuperação
 
