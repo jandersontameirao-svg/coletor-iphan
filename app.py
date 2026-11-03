@@ -22,6 +22,7 @@ import archive_policy
 import sharepoint_store
 import market_domain
 import ai_classifier
+import atena_webhook
 from pypdf import PdfReader
 
 ROOT = Path(os.getenv('COLLECTOR_DATA', './data')).resolve()
@@ -63,6 +64,7 @@ repository_migration.migrate(db)
 knowledge_domain.migrate(db)
 geo_domain.migrate(db)
 sei_domain.migrate(db)
+atena_webhook.migrate(db)
 
 def password_hash(password, salt=None):
     salt = salt or secrets.token_hex(16)
@@ -650,7 +652,7 @@ async def manual_resolution(jid: str,item_id: str,request: Request,name: str,use
 
 @app.get('/v1/capabilities')
 def capabilities(user=Depends(identity)):
-    return {'manual_import':sorted(archive_policy.MIMES),'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'public_sei_process_pages':True,'public_sei_document_discovery':True,'portal_search':False,'direct_download_formats':sorted(archive_policy.MIMES),'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_formats':['kml','kmz','shp','shapefile_zip','geojson','json','gpx'],'spatial_srs':['EPSG:4326'],'process_analysis_dashboard':True,'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':ai_classifier.available(),'ai_category_suggestion':ai_classifier.available(),'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.7.0'}
+    return {'manual_import':sorted(archive_policy.MIMES),'native_extraction':True,'external_collection':True,'external_homologated':False,'link_input':True,'link_lists':True,'public_sei_process_pages':True,'public_sei_document_discovery':True,'portal_search':False,'direct_download_formats':sorted(archive_policy.MIMES),'access_control':['read','operate','review','admin'],'technical_library':True,'taxonomy_version':'seed-2026-10','taxonomy_approved':False,'groups':True,'service_accounts':True,'delegation':True,'ocr':ocr_optional.capability(),'spatial_search':True,'spatial_formats':['kml','kmz','shp','shapefile_zip','geojson','json','gpx'],'spatial_srs':['EPSG:4326'],'process_analysis_dashboard':True,'knowledge_assertions':True,'knowledge_human_validation':True,'automatic_facts':False,'ai':ai_classifier.available(),'ai_category_suggestion':ai_classifier.available(),'atena_service_api':True,'atena_webhook':atena_webhook.configured(),'admin':user['role']=='admin' and not user.get('_delegation') and user.get('kind','human')=='human','storage':'sqlite-local','durable_queue':True,'async_extraction':True,'version':'0.7.0'}
 
 @app.get('/v1/me')
 def me(user=Depends(identity)):
@@ -763,6 +765,8 @@ import bridge_routes
 bridge_routes.register(sys.modules[__name__])
 import market_routes
 market_routes.register(sys.modules[__name__])
+import atena_routes
+atena_routes.register(sys.modules[__name__])
 
 import access_routes
 import catalog_routes
