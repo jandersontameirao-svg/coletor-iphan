@@ -78,8 +78,8 @@ class BridgeTests(Fixture):
             cloud.sync_once(app)
         with app.db() as c:self.assertNotEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'uploaded')
         self.assertTrue((app.ROOT/'blobs'/revision['sha256']).is_file())
-    def test_four_tabs_and_human_category_history(self):
-        self.assertEqual(self.client.get('/').text.count('data-tab='),4)
+    def test_six_tabs_and_human_category_history(self):
+        self.assertEqual(self.client.get('/').text.count('data-tab='),6)
         revision=self.upload(name='desconhecido.txt');did=revision['document_id']
         r=self.client.patch('/v1/bridge/documents/'+did+'/category',headers=self.h,json={'category':'RAIPI'})
         self.assertEqual(r.status_code,200,r.text)

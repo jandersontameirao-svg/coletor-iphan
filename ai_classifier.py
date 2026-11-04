@@ -11,6 +11,7 @@ import os
 import httpx
 
 import archive_policy as policy
+import atena_memory
 
 CATEGORIES = ('Georreferenciados', *policy.STUDIES)
 MAX_CHARS = 12000
@@ -123,8 +124,11 @@ def suggest_category(text, name='', title=''):
         f'Trecho do documento (pode estar truncado):\n{snippet}'
     )
     model = _model()
+    # Diretrizes aprendidas pela Atena valem para TODA geração de IA, inclusive esta.
+    directives = atena_memory.directives_text()
+    system = _SYSTEM + ('\n\n' + directives if directives else '')
     messages = [
-        {'role': 'system', 'content': _SYSTEM},
+        {'role': 'system', 'content': system},
         {'role': 'user', 'content': user},
     ]
     content = _complete(key, model, messages)
