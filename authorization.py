@@ -24,7 +24,7 @@ def delegation_valid(c,user,pid,permission):
     delegation=user.get('_delegation')
     if not delegation: return True
     row=c.execute('SELECT * FROM delegations WHERE id=? AND service_id=? AND user_id=? AND active=1 AND expires>?',(delegation,user['_actor_id'],user['id'],time.time())).fetchone()
-    if not row or not c.execute('SELECT token FROM service_tokens WHERE user_id=? AND active=1 AND expires>? LIMIT 1',(user['_actor_id'],time.time())).fetchone(): return False
+    if not row or not c.execute('SELECT token FROM service_tokens WHERE user_id=? AND active=1 AND (expires IS NULL OR expires>?) LIMIT 1',(user['_actor_id'],time.time())).fetchone(): return False
     scopes=json.loads(row['scopes'])
     return permission in scopes.get(pid,[]) and allows_principal(c,pid,user['_actor_id'],permission)
 
@@ -41,7 +41,7 @@ def job_authorized(c,job):
     row=c.execute('SELECT * FROM users WHERE id=? AND active=1',(job['owner'],)).fetchone()
     if not row: return False
     user=dict(row)
-    if user['kind']=='service' and not c.execute('SELECT token FROM service_tokens WHERE user_id=? AND active=1 AND expires>? LIMIT 1',(user['id'],time.time())).fetchone(): return False
+    if user['kind']=='service' and not c.execute('SELECT token FROM service_tokens WHERE user_id=? AND active=1 AND (expires IS NULL OR expires>?) LIMIT 1',(user['id'],time.time())).fetchone(): return False
     if job.get('delegation_id'):
         user['_delegation']=job['delegation_id'];user['_actor_id']=job['actor_id']
     payload=json.loads(job['input'])

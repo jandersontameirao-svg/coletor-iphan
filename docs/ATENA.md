@@ -10,8 +10,21 @@ Coletor cria a conta e entrega o token **uma única vez**:
 
 ```
 POST /v1/service-accounts            # body: {"name":"atena"}  (admin)
-→ {"id":"...","access_token":"<TOKEN>","expires_in":2592000, ...}
+→ {"id":"...","access_token":"<TOKEN>","expires_in":null, ...}   # null = sem validade
 ```
+
+Por padrão o token **não expira** (`expires_in: null`). Para impor um prazo,
+envie `{"name":"atena","expires_in":2592000}` (segundos).
+
+Para tornar permanente um token **já emitido** (sem reemitir, o conector da
+Atena continua o mesmo):
+
+```
+POST /v1/service-accounts/{id}/renew   # body: {}  → torna permanente  (admin)
+→ {"id":"...","tokens_updated":1,"expires_in":null,"permanent":true}
+```
+
+Para em vez disso redefinir um prazo: `{"expires_in":<segundos>}`.
 
 A Atena envia em **toda** requisição:
 
@@ -22,6 +35,7 @@ Authorization: Bearer <TOKEN>
 - Sem token válido → **401** (todas as rotas autenticam na primeira linha).
 - O token é guardado no servidor apenas como **hash**; valor em claro só existe
   no cofre da Atena. Revogação: `POST /v1/service-accounts/{id}/revoke`.
+  Renovação/prazo: `POST /v1/service-accounts/{id}/renew`.
 - **Acesso é por processo (ACL).** O token só enxerga processos cujos grants
   foram concedidos à conta `atena`:
   `POST /v1/processes/{pid}/permissions` com

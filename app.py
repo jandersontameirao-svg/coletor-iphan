@@ -84,7 +84,7 @@ def identity(request: Request):
     with db() as c:
         row=c.execute("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1 AND u.kind='human'",(token,time.time())).fetchone()
         if not row:
-            row=c.execute("SELECT u.* FROM service_tokens s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND s.active=1 AND u.active=1 AND u.kind='service'",(token,time.time())).fetchone()
+            row=c.execute("SELECT u.* FROM service_tokens s JOIN users u ON u.id=s.user_id WHERE s.token=? AND (s.expires IS NULL OR s.expires>?) AND s.active=1 AND u.active=1 AND u.kind='service'",(token,time.time())).fetchone()
         if not row: raise HTTPException(401,'Sessão inválida ou expirada')
         user=dict(row)
         delegation=request.headers.get('X-Delegation-Id')

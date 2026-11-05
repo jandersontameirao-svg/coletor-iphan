@@ -15,6 +15,9 @@ class Grant(BaseModel):
     role: Literal['read','operate','review','admin']
 class Named(BaseModel):
     name: str = Field(min_length=1,max_length=150)
+    expires_in: int | None = Field(default=None,ge=60)   # None = sem validade (permanente)
+class Renew(BaseModel):
+    expires_in: int | None = Field(default=None,ge=60)   # None = tornar permanente
 class Member(BaseModel):
     user_id: str
     active: bool = True
@@ -99,12 +102,26 @@ def register(app,db,event,identity,platform_admin,uid,password_hash):
     @app.post('/v1/service-accounts',status_code=201)
     def service(body: Named,user=Depends(identity)):
         platform_admin(user);sid=uid();token=secrets.token_urlsafe(40)
+        expires=None if not body.expires_in else time.time()+body.expires_in
         with db() as c:
             try: c.execute("INSERT INTO users(id,name,password,role,kind) VALUES(?,?,?,'operator','service')",(sid,body.name,''))
             except Exception: raise HTTPException(409,'Nome já existente')
-            c.execute('INSERT INTO service_tokens VALUES(?,?,?,1)',(hashlib.sha256(token.encode()).hexdigest(),sid,time.time()+86400*30))
+            c.execute('INSERT INTO service_tokens VALUES(?,?,?,1)',(hashlib.sha256(token.encode()).hexdigest(),sid,expires))
             event(c,user['id'],'service.created',sid)
-        return {'id':sid,'access_token':token,'expires_in':86400*30,'notice':'Token exibido somente nesta resposta; armazene em cofre'}
+        return {'id':sid,'access_token':token,'expires_in':body.expires_in,'notice':'Token exibido somente nesta resposta; armazene em cofre'}
+
+    @app.post('/v1/service-accounts/{sid}/renew')
+    def renew_service(sid: str,body: Renew,user=Depends(identity)):
+        """Reajusta a validade do(s) token(s) ativo(s) da conta SEM reemitir — expires_in ausente/None torna permanente."""
+        platform_admin(user)
+        expires=None if not body.expires_in else time.time()+body.expires_in
+        with db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            if not c.execute("SELECT id FROM users WHERE id=? AND kind='service' AND active=1",(sid,)).fetchone(): raise HTTPException(404)
+            n=c.execute('UPDATE service_tokens SET expires=? WHERE user_id=? AND active=1',(expires,sid)).rowcount
+            if not n: raise HTTPException(404,'Nenhum token ativo para esta conta')
+            event(c,user['id'],'service.renewed',sid)
+        return {'id':sid,'tokens_updated':n,'expires_in':body.expires_in,'permanent':expires is None}
 
     @app.post('/v1/service-accounts/{sid}/revoke',status_code=204)
     def revoke_service(sid: str,user=Depends(identity)):
