@@ -6,7 +6,7 @@ O destino inicial é o link da pasta no site ATENA fornecido por Janderson. Ele 
 
 1. Registrar um aplicativo de locatário único no Microsoft Entra ID.
 2. Habilitar o fluxo de cliente público (device code).
-3. Adicionar Microsoft Graph, permissão **delegada Files.ReadWrite**, e conceder consentimento conforme a política da organização. O protocolo também solicita `offline_access` para renovação. Não é necessário criar segredo de cliente neste fluxo.
+3. Adicionar Microsoft Graph, permissão **delegada Files.ReadWrite.All** (necessária para gravar em biblioteca de site do SharePoint; `Files.ReadWrite` sozinha só alcança o OneDrive do usuário), e conceder consentimento conforme a política da organização. O protocolo também solicita `offline_access` para renovação. Não é necessário criar segredo de cliente neste fluxo.
 4. Configurar `MICROSOFT_TENANT_ID` e `MICROSOFT_CLIENT_ID` no ambiente da API e do worker. Esses são identificadores, não senhas. Usar uma conta profissional autorizada para a biblioteca.
 5. Na aba Configurações, confirmar o link e selecionar **Conectar com Microsoft**. A tela apresenta um código e o endereço oficial `microsoft.com/devicelogin`. A senha/MFA são informados apenas à Microsoft.
 6. Selecionar **Testar leitura e gravação**. Essa ação cria um TXT com nome único, baixa seus bytes para conferir integridade e remove somente esse arquivo de teste. Só depois o destino é liberado para a fila.

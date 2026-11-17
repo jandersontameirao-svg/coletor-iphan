@@ -18,7 +18,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import archive_policy
 
 DEFAULT_FOLDER='https://arqueogis.sharepoint.com/:f:/s/ATENA/IgAiQ-amW5ZLQJfYiaoyBy11ATZa4qtZe8iPjpKGQoGpb0E?e=rrWu6g'
-SCOPES='https://graph.microsoft.com/Files.ReadWrite offline_access'
+SCOPES='https://graph.microsoft.com/Files.ReadWrite.All offline_access'
 GRAPH='https://graph.microsoft.com/v1.0'
 LOCK=threading.RLock()
 
@@ -222,7 +222,7 @@ def sync_once(app):
             if row['delegation_id']: user.update(_delegation=row['delegation_id'],_actor_id=row['actor_id'])
             try: app.revision_access(c,row['revision_id'],user,'operate')
             except Exception: raise CloudError('transfer_authorization_revoked',403)
-            if user['kind']=='service' and not c.execute('SELECT 1 FROM service_tokens WHERE user_id=? AND active=1 AND expires>?',(user['id'],time.time())).fetchone(): raise CloudError('transfer_authorization_revoked',403)
+            if user['kind']=='service' and not c.execute('SELECT 1 FROM service_tokens WHERE user_id=? AND active=1 AND (expires IS NULL OR expires>?)',(user['id'],time.time())).fetchone(): raise CloudError('transfer_authorization_revoked',403)
             c.execute('UPDATE cloud_transfers SET lease_until=? WHERE id=? AND lease=?',(time.time()+180,row['id'],lease))
     try:
         guard()
