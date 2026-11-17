@@ -17,6 +17,7 @@ serviço): aqui são rotas /v1/assistant/* para usuários HUMANOS da equipe.
 """
 import json
 import os
+import re
 import time
 
 from fastapi import Depends, HTTPException
@@ -26,6 +27,35 @@ import ai_classifier
 import archive_policy as policy
 import atena_memory
 import authorization
+
+# Busca com IA (RAG) sobre o conteúdo extraído dos documentos (tabela evidence).
+RETRIEVE_CANDIDATES = 400   # linhas de evidência consideradas antes do ranking
+RETRIEVE_TOP = 10           # melhores trechos enviados à IA
+EXCERPT_CHARS = 1200        # limite por trecho (controla o tamanho do prompt)
+_STOPWORDS = {
+    'a', 'o', 'os', 'as', 'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'no', 'na', 'nos', 'nas',
+    'um', 'uma', 'uns', 'umas', 'que', 'com', 'por', 'para', 'pra', 'ao', 'aos', 'se', 'sua',
+    'seu', 'suas', 'seus', 'qual', 'quais', 'quem', 'onde', 'quando', 'como', 'sobre', 'entre',
+    'ou', 'the', 'foi', 'ser', 'era', 'são', 'tem', 'ha', 'há', 'esta', 'este', 'isso', 'esse',
+    'essa', 'pelo', 'pela', 'mais', 'menos', 'ja', 'já', 'nao', 'não', 'sim',
+}
+
+
+def _terms(question):
+    """Palavras significativas da pergunta, sem acentos/repetição, para recuperar trechos."""
+    tokens = re.findall(r'[0-9a-zA-ZÀ-ÿ]+', (question or '').lower())
+    return [t for t in dict.fromkeys(tokens) if len(t) >= 3 and t not in _STOPWORDS]
+
+
+_SEARCH_SYSTEM = (
+    'Você é a Atena, assistente do Coletor IPHAN. Responda à PERGUNTA do usuário USANDO SOMENTE os '
+    'TRECHOS DE DOCUMENTOS fornecidos abaixo. Cada trecho traz seu document_id, o processo e a página. '
+    'Se a resposta não estiver nos trechos, diga claramente que não encontrou nos documentos — NUNCA '
+    'invente nem use conhecimento externo. Cite as fontes que embasam a resposta. '
+    'Responda SOMENTE um objeto JSON com as chaves exatas: "resposta" (texto em português, objetivo, '
+    'baseado no que os trechos dizem) e "fontes" (lista de objetos {document_id, pagina}); use apenas '
+    'document_id que apareçam nos trechos. Se não encontrar, explique isso em "resposta" e deixe "fontes" vazio.'
+)
 
 WRITE_CATEGORIES = ('Georreferenciados', *policy.STUDIES)
 ACTION_TYPES = ('classificar_documento', 'solicitar_envio')
@@ -75,6 +105,11 @@ class MemoryInput(BaseModel):
 class ExecuteInput(BaseModel):
     tipo: str = Field(max_length=40)
     dados: dict = Field(default_factory=dict)
+
+
+class AssistantSearch(BaseModel):
+    question: str = Field(min_length=3, max_length=1000)
+    process_id: str | None = Field(default=None, max_length=64)
 
 
 def register(appmod):
@@ -215,6 +250,98 @@ def register(appmod):
             return None
         dados = acao.get('dados') if isinstance(acao.get('dados'), dict) else {}
         return {'tipo': tipo, 'dados': dados}
+
+    def _retrieve(c, user, question, pid):
+        """Recupera os trechos mais relevantes do conteúdo extraído (evidence), respeitando a ACL."""
+        terms = _terms(question)
+        if not terms:
+            return []
+        pids = [a.process_access(c, pid, user)['id']] if pid else _accessible_pids(c, user)
+        if not pids:
+            return []
+        marks = ','.join('?' * len(pids))
+        like = ' OR '.join(["e.text LIKE ? ESCAPE '\\'"] * len(terms))
+        patterns = ['%' + t.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%' for t in terms]
+        rows = c.execute(
+            'SELECT e.id AS evidence_id,e.page,e.text,r.id AS revision_id,d.id AS document_id,d.name,'
+            'p.number,p.title,p.id AS process_id '
+            'FROM evidence e JOIN revisions r ON r.id=e.revision_id JOIN documents d ON d.id=r.document_id '
+            'JOIN processes p ON p.id=d.process_id '
+            f'WHERE d.process_id IN ({marks}) AND ({like}) ORDER BY e.rowid LIMIT ?',
+            (*pids, *patterns, RETRIEVE_CANDIDATES)).fetchall()
+        scored = []
+        for row in rows:
+            low = (row['text'] or '').lower()
+            coverage = sum(1 for t in terms if t in low)
+            occurrences = sum(low.count(t) for t in terms)
+            scored.append((coverage, occurrences, dict(row)))
+        scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        return [item[2] for item in scored[:RETRIEVE_TOP]]
+
+    @app.post('/v1/assistant/search')
+    def assistant_search(body: AssistantSearch, user=Depends(a.identity)):
+        """Pergunta em linguagem natural; a IA responde a partir do CONTEÚDO dos arquivos, citando fontes."""
+        _human(user)
+        if not ai_classifier.available():
+            raise HTTPException(503, 'IA indisponível: configure OPENAI_API_KEY para usar a busca com IA')
+        actor = user.get('_actor_id', user['id'])
+        pid = body.process_id or None
+        with a.db() as c:
+            if pid:
+                a.process_access(c, pid, user, 'read')
+            chunks = _retrieve(c, user, body.question, pid)
+        if not chunks:
+            with a.db() as c:
+                a.event(c, actor, 'assistant.search', pid or 'geral')
+            return {'resposta': 'Não encontrei nada no conteúdo extraído dos documentos a que você tem acesso. '
+                                'Verifique se os documentos já passaram por extração de texto (ou OCR) ou refine os termos.',
+                    'fontes': [], 'trechos_considerados': 0, 'modelo': ai_classifier._model()}
+        blocos = []
+        for ch in chunks:
+            pagina = ch['page'] if ch['page'] is not None else '-'
+            blocos.append(f"[documento: {ch['name']} | document_id: {ch['document_id']} | "
+                          f"processo: {ch['number']} | página: {pagina}]\n{(ch['text'] or '')[:EXCERPT_CHARS]}")
+        directives = atena_memory.directives_text()
+        system = _SEARCH_SYSTEM + ('\n\n' + directives if directives else '')
+        user_content = 'PERGUNTA:\n' + body.question + '\n\nTRECHOS DE DOCUMENTOS (responda só com base nestes):\n\n' + '\n\n---\n\n'.join(blocos)
+        key = os.getenv('OPENAI_API_KEY')
+        try:
+            raw = ai_classifier._complete(key, ai_classifier._model(), [
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': user_content},
+            ])
+            parsed = json.loads(ai_classifier._strip_json(raw))
+            if not isinstance(parsed, dict):
+                raise ValueError
+        except ai_classifier.AIError as exc:
+            raise HTTPException(502, str(exc))
+        except (ValueError, TypeError):
+            raise HTTPException(502, 'Resposta da IA ilegível')
+        resposta = str(parsed.get('resposta') or '').strip() or 'Não consegui formular uma resposta a partir dos trechos.'
+        by_doc = {ch['document_id']: ch for ch in chunks}
+        fontes, seen = [], set()
+        for f in (parsed.get('fontes') or []):
+            if not isinstance(f, dict):
+                continue
+            did = str(f.get('document_id') or '')
+            if did in by_doc and did not in seen:
+                seen.add(did)
+                ch = by_doc[did]
+                pagina = f.get('pagina') if isinstance(f.get('pagina'), int) else ch['page']
+                fontes.append({'document_id': did, 'documento': ch['name'], 'processo': ch['number'],
+                               'pagina': pagina, 'revision_id': ch['revision_id'],
+                               # O arquivo em si: baixar o original preservado e, se já enviado, abrir no SharePoint.
+                               'download_url': '/v1/document-revisions/' + ch['revision_id'] + '/download',
+                               'sharepoint_url': None})
+        with a.db() as c:
+            for fonte in fontes:
+                transfer = c.execute(
+                    "SELECT web_url FROM cloud_transfers WHERE revision_id=? AND web_url IS NOT NULL "
+                    "ORDER BY rowid DESC LIMIT 1", (fonte['revision_id'],)).fetchone()
+                if transfer:
+                    fonte['sharepoint_url'] = transfer['web_url']
+            a.event(c, actor, 'assistant.search', pid or 'geral')
+        return {'resposta': resposta, 'fontes': fontes, 'trechos_considerados': len(chunks), 'modelo': ai_classifier._model()}
 
     @app.get('/v1/assistant/memories')
     def list_memories(user=Depends(a.identity)):
