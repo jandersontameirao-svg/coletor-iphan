@@ -240,7 +240,9 @@ def sync_once(app):
             result=graph.request('PATCH','/drives/'+quote(target['drive_id'],safe='')+'/items/'+quote(row['item_id'],safe=''),{'parentReference':{'id':parent},'name':filename},guard=guard)
         else:
             result=graph.put(target['drive_id'],parent,filename,raw,guard)
-        if not result.get('id') or result.get('size')!=len(raw): raise CloudError('remote_size_mismatch')
+        if not result.get('id'): raise CloudError('remote_upload_failed')
+        # O 'size' retornado pelo Graph pode divergir para formatos Office (OOXML) mesmo com o
+        # arquivo íntegro; a verificação autoritativa é o SHA-256 por releitura (confere tamanho e bytes).
         graph.verify(target['drive_id'],result['id'],raw,guard)
         guard()
         with app.db() as c:
