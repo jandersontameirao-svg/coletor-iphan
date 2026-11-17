@@ -78,16 +78,18 @@ class BridgeTests(Fixture):
             cloud.sync_once(app)
         with app.db() as c:self.assertNotEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'uploaded')
         self.assertTrue((app.ROOT/'blobs'/revision['sha256']).is_file())
-    def test_office_size_divergence_still_uploads_when_verified(self):
-        # Formatos Office (OOXML) podem retornar 'size' divergente no Graph; o verify por SHA-256 decide.
+    def test_office_file_uploads_without_strict_hash_and_is_marked_adjusted(self):
+        # O SharePoint reescreve arquivos Office; não exigimos SHA-256 byte-a-byte (verify não é chamado),
+        # mas o envio é registrado no histórico como 'office_adjusted'. Demais formatos seguem estritos.
         revision=self.upload(b'planilha preservada',name='relatorio.xlsx')
         with app.db() as c:
             c.execute('UPDATE bridge_settings SET checked=?,drive_id=?,folder_id=?',(time.time(),'drive-fixture','root-fixture'))
             c.execute("UPDATE cloud_transfers SET status='cancelled' WHERE revision_id!=?",(revision['revision_id'],))
-        with patch.object(cloud.Graph,'ensure_folder',return_value='folder'),patch.object(cloud.Graph,'put',return_value={'id':'remote','size':len(b'planilha preservada')+321,'webUrl':'https://arqueogis.sharepoint.com/file'}),patch.object(cloud.Graph,'verify',return_value={}) as verify:
-            self.assertTrue(cloud.sync_once(app));verify.assert_called_once()
+        with patch.object(cloud.Graph,'ensure_folder',return_value='folder'),patch.object(cloud.Graph,'put',return_value={'id':'remote','size':len(b'planilha preservada')+321,'webUrl':'https://arqueogis.sharepoint.com/file'}),patch.object(cloud.Graph,'verify',side_effect=cloud.CloudError('remote_integrity_mismatch')) as verify:
+            self.assertTrue(cloud.sync_once(app));verify.assert_not_called()
         with app.db() as c:
             self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'uploaded')
+            self.assertEqual(c.execute("SELECT count(*) FROM audit WHERE action='sharepoint.transfer.office_adjusted'").fetchone()[0],1)
     def test_six_tabs_and_human_category_history(self):
         self.assertEqual(self.client.get('/').text.count('data-tab='),6)
         revision=self.upload(name='desconhecido.txt');did=revision['document_id']

@@ -19,6 +19,9 @@ import archive_policy
 
 DEFAULT_FOLDER='https://arqueogis.sharepoint.com/:f:/s/ATENA/IgAiQ-amW5ZLQJfYiaoyBy11ATZa4qtZe8iPjpKGQoGpb0E?e=rrWu6g'
 SCOPES='https://graph.microsoft.com/Files.ReadWrite.All offline_access'
+# O SharePoint reescreve estes formatos ao armazenar (Document ID/metadados), então a cópia remota
+# deixa de ser byte-idêntica. Para eles, dispensamos a verificação estrita por SHA-256 (opção 2).
+OFFICE_FORMATS={'.docx','.xlsx','.doc','.xls'}
 GRAPH='https://graph.microsoft.com/v1.0'
 LOCK=threading.RLock()
 
@@ -241,14 +244,21 @@ def sync_once(app):
         else:
             result=graph.put(target['drive_id'],parent,filename,raw,guard)
         if not result.get('id'): raise CloudError('remote_upload_failed')
-        # O 'size' retornado pelo Graph pode divergir para formatos Office (OOXML) mesmo com o
-        # arquivo íntegro; a verificação autoritativa é o SHA-256 por releitura (confere tamanho e bytes).
-        graph.verify(target['drive_id'],result['id'],raw,guard)
+        # O SharePoint reescreve arquivos Office (injeção de Document ID/metadados), então a cópia remota
+        # não é byte-idêntica ao original. O original byte-a-byte permanece no cache local (fonte da verdade,
+        # com SHA-256 no catálogo); para Office confirmamos apenas que a cópia de distribuição existe com
+        # conteúdo, e o envio é registrado como 'office_adjusted' no histórico. Demais formatos (PDF, ZIP,
+        # imagens, etc.) mantêm a verificação estrita por SHA-256 via releitura.
+        office=ext.lower() in OFFICE_FORMATS
+        if office:
+            if not result.get('size'): raise CloudError('remote_upload_failed')
+        else:
+            graph.verify(target['drive_id'],result['id'],raw,guard)
         guard()
         with app.db() as c:
             c.execute('BEGIN IMMEDIATE')
             updated=c.execute("UPDATE cloud_transfers SET status='uploaded',item_id=?,web_url=?,remote_path=?,error=NULL,lease=NULL,updated=? WHERE id=? AND lease=?",(result['id'],result.get('webUrl',''),'/'.join(folders+[filename]),time.time(),row['id'],lease))
-            if updated.rowcount: app.event(c,row['actor_id'],'sharepoint.transfer.verified',row['id'])
+            if updated.rowcount: app.event(c,row['actor_id'],'sharepoint.transfer.office_adjusted' if office else 'sharepoint.transfer.verified',row['id'])
     except (CloudError,OSError) as e:
         code=e.code if isinstance(e,CloudError) else 'local_file_missing'
         auth_errors={'sharepoint_not_connected','reauthentication_required','invalid_grant','token_cache_unreadable','microsoft_app_not_configured'}
