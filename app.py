@@ -756,6 +756,13 @@ def ui():
             '{{DEMO_ACCESS_HIDDEN}}': 'hidden',
             '{{LOGIN_FOOTER}}': 'Credenciais definidas pelo administrador. Nenhuma senha padrão.',
         }
+    # Cache-busting: a URL do JS/CSS muda quando o arquivo muda, para o navegador
+    # nunca servir uma versão antiga em cache após um deploy.
+    asset_version = str(int(max(
+        Path(__file__).with_name('bridge_ui.js').stat().st_mtime,
+        Path(__file__).with_name('bridge.css').stat().st_mtime,
+    )))
+    replacements['{{ASSET_VERSION}}'] = asset_version
     for marker, value in replacements.items():
         page = page.replace(marker, value)
     return HTMLResponse(page)
