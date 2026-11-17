@@ -80,5 +80,7 @@ def category(name, title='', data=None):
     if re.search(r'\b(OFICIO|DESPACHO|PARECER|PORTARIA|LICENCA|ATA)\b',normalized): return 'Outros documentos','administrative_title'
     return 'A classificar','no_explicit_type'
 
-def relative_folder(number, kind):
-    return process_folder(number)+'/'+('Georreferenciados' if kind=='Georreferenciados' else 'Documentos/'+kind)
+def relative_folder(number, kind, collection=None):
+    base=process_folder(number)+'/'+('Georreferenciados' if kind=='Georreferenciados' else 'Documentos/'+kind)
+    name=safe_name(collection) if collection and str(collection).strip() else ''
+    return (name+'/'+base) if name else base

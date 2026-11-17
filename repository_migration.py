@@ -16,7 +16,7 @@ def migrate(db):
         c.execute('BEGIN IMMEDIATE')
         for table,columns in {
             'users':[('kind',"TEXT NOT NULL DEFAULT 'human'")],
-            'processes':[('domain',"TEXT NOT NULL DEFAULT 'central'"),('number_key',"TEXT NOT NULL DEFAULT ''"),('canonical_id','TEXT')],
+            'processes':[('domain',"TEXT NOT NULL DEFAULT 'central'"),('number_key',"TEXT NOT NULL DEFAULT ''"),('canonical_id','TEXT'),('collection','TEXT')],
             'jobs':[('actor_id','TEXT'),('delegation_id','TEXT'),('extraction_key','TEXT')],
             'evidence':[('run_id','TEXT')],
         }.items():

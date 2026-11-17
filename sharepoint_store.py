@@ -230,11 +230,11 @@ def sync_once(app):
     try:
         guard()
         with app.db() as c:
-            r=c.execute('SELECT r.*,d.name,d.process_id,p.number FROM revisions r JOIN documents d ON d.id=r.document_id JOIN processes p ON p.id=d.process_id WHERE r.id=?',(row['revision_id'],)).fetchone()
+            r=c.execute('SELECT r.*,d.name,d.process_id,p.number,p.collection FROM revisions r JOIN documents d ON d.id=r.document_id JOIN processes p ON p.id=d.process_id WHERE r.id=?',(row['revision_id'],)).fetchone()
         raw=(app.ROOT/'blobs'/r['blob']).read_bytes()
         if hashlib.sha256(raw).hexdigest()!=r['blob']: raise CloudError('local_integrity_mismatch')
         graph=Graph(app.db,app.ROOT);parent=target['folder_id']
-        folders=archive_policy.relative_folder(r['number'],row['category']).split('/')
+        folders=archive_policy.relative_folder(r['number'],row['category'],r['collection']).split('/')
         for folder in folders: parent=graph.ensure_folder(target['drive_id'],parent,folder,guard)
         ext=Path(r['name']).suffix
         stem=r['name'][:-len(ext)] if ext else r['name']

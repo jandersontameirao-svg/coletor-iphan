@@ -90,6 +90,40 @@ class BridgeTests(Fixture):
         with app.db() as c:
             self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'uploaded')
             self.assertEqual(c.execute("SELECT count(*) FROM audit WHERE action='sharepoint.transfer.office_adjusted'").fetchone()[0],1)
+    def test_collection_folder_prefixes_sharepoint_path(self):
+        # Unidade: a coleção vira a pasta de topo; sem coleção, nada muda.
+        self.assertEqual(policy.relative_folder('01422.000120/2011-70','RAIPI','Zanettini'),'Zanettini/01422.000120-2011-70/Documentos/RAIPI')
+        self.assertEqual(policy.relative_folder('01422.000120/2011-70','RAIPI',''),'01422.000120-2011-70/Documentos/RAIPI')
+        revision=self.upload(b'RAIPI preservado',name='1234567_RAIPI.txt')
+        r=self.client.patch('/v1/processes/'+self.pid,headers=self.h,json={'number':self.number,'title':'Compartilhado','collection':'Zanettini'})
+        self.assertEqual(r.status_code,200,r.text)
+        # A pasta aparece no caminho exibido na Biblioteca.
+        item=next(i for i in self.client.get('/v1/bridge/library',headers=self.h).json()['items'] if i['revision_id']==revision['revision_id'])
+        self.assertEqual(item['collection'],'Zanettini');self.assertTrue(item['folder'].startswith('Zanettini/'))
+        with app.db() as c:
+            c.execute('UPDATE bridge_settings SET checked=?,drive_id=?,folder_id=?',(time.time(),'drive-fixture','root-fixture'))
+            c.execute("UPDATE cloud_transfers SET status='cancelled' WHERE revision_id!=?",(revision['revision_id'],))
+        with patch.object(cloud.Graph,'ensure_folder',return_value='folder') as folder,patch.object(cloud.Graph,'put',return_value={'id':'remote','size':len(b'RAIPI preservado'),'webUrl':'https://arqueogis.sharepoint.com/file'}),patch.object(cloud.Graph,'verify',return_value={}):
+            self.assertTrue(cloud.sync_once(app))
+            self.assertEqual([call.args[2] for call in folder.call_args_list][0],'Zanettini')
+        with app.db() as c:
+            self.assertTrue(c.execute('SELECT remote_path FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0].startswith('Zanettini/'))
+
+    def test_changing_collection_requeues_uploaded_transfers_to_move(self):
+        revision=self.upload(b'RAIPI preservado',name='1234567_RAIPI.txt')
+        with app.db() as c:
+            c.execute('UPDATE bridge_settings SET checked=?,drive_id=?,folder_id=?',(time.time(),'drive-fixture','root-fixture'))
+            c.execute("UPDATE cloud_transfers SET status='cancelled' WHERE revision_id!=?",(revision['revision_id'],))
+        with patch.object(cloud.Graph,'ensure_folder',return_value='folder'),patch.object(cloud.Graph,'put',return_value={'id':'remote','size':len(b'RAIPI preservado'),'webUrl':'https://x'}),patch.object(cloud.Graph,'verify',return_value={}):
+            self.assertTrue(cloud.sync_once(app))
+        with app.db() as c:
+            self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'uploaded')
+        # Definir a coleção re-enfileira o que já subiu, para o sync mover para a nova pasta.
+        r=self.client.patch('/v1/processes/'+self.pid,headers=self.h,json={'number':self.number,'title':'Compartilhado','collection':'Zanettini'})
+        self.assertEqual(r.status_code,200,r.text);self.assertEqual(r.json()['transfers_requeued'],1)
+        with app.db() as c:
+            self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'queued')
+
     def test_six_tabs_and_human_category_history(self):
         self.assertEqual(self.client.get('/').text.count('data-tab='),6)
         revision=self.upload(name='desconhecido.txt');did=revision['document_id']

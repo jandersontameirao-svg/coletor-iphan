@@ -137,6 +137,7 @@ class Login(BaseModel):
 class ProcessInput(BaseModel):
     number: str = Field(min_length=1,max_length=100)
     title: str = Field(min_length=1,max_length=300)
+    collection: str | None = Field(default=None,max_length=180)
 class ProjectInput(BaseModel):
     name: str = Field(min_length=1,max_length=300)
 class JobInput(BaseModel):
@@ -209,11 +210,12 @@ def create_process(body: ProcessInput,user=Depends(identity)):
     number=''.join(body.number.split()); key=repository_migration.number_key(number)
     if not key: raise HTTPException(422,'Número inválido')
     pid=uid();folder=f'{number} — {body.title}'
+    collection=(body.collection or '').strip() or None
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
         if c.execute('SELECT id FROM processes WHERE number_key=? AND canonical_id IS NULL',(key,)).fetchone():
             raise HTTPException(409,'Processo já registrado no domínio; solicite acesso ao responsável')
-        c.execute('INSERT INTO processes(id,owner,number,title,folder,domain,number_key) VALUES(?,?,?,?,?,?,?)',(pid,user['id'],number,body.title,folder,'central',key))
+        c.execute('INSERT INTO processes(id,owner,number,title,folder,domain,number_key,collection) VALUES(?,?,?,?,?,?,?,?)',(pid,user['id'],number,body.title,folder,'central',key,collection))
         c.execute("INSERT INTO process_registry VALUES('central',?,?)",(key,pid))
         c.execute('INSERT INTO resource_grants VALUES(?,?,?,?,?,?,?)',(uid(),pid,'user',user['id'],'admin',1,time.time()))
         event(c,user['id'],'process.created',pid)
@@ -248,6 +250,14 @@ def rename(pid: str,body: ProcessInput,user=Depends(identity)):
         if row['title']!=body.title:
             c.execute('UPDATE processes SET title=?,folder=? WHERE id=?',(body.title,f'{row["number"]} — {body.title}',pid))
             event(c,user['id'],'process.renamed',pid)
+        collection=(body.collection or '').strip() or None
+        if collection!=row['collection']:
+            c.execute('UPDATE processes SET collection=? WHERE id=?',(collection,pid))
+            # Reenfileira os originais já enviados para que o sync os MOVA para a nova pasta de coleção
+            # (não duplica: o sync faz PATCH de parentReference quando o item já existe no SharePoint).
+            moved=c.execute("UPDATE cloud_transfers SET status='queued',attempts=0,available=0 WHERE status='uploaded' AND revision_id IN (SELECT r.id FROM revisions r JOIN documents d ON d.id=r.document_id WHERE d.process_id=?)",(pid,)).rowcount
+            event(c,user.get('_actor_id',user['id']),'process.collection.set',pid)
+            return {'id':pid,'collection':collection,'transfers_requeued':moved}
     return {'id':pid}
 
 @app.post('/v1/projects',status_code=201)

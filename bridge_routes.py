@@ -57,7 +57,7 @@ def register(appmod):
         target=cloud.configuration(a.db); dest=hashlib.sha256(target['folder_url'].encode()).hexdigest()
         result=[]
         with a.db() as c:
-            for row in c.execute('SELECT r.id AS revision_id,r.blob AS sha256,r.created,d.id AS document_id,d.name,d.process_id,p.number,p.title,b.mime,b.size,l.category,l.method FROM documents d JOIN processes p ON p.id=d.process_id JOIN revisions r ON r.document_id=d.id JOIN blobs b ON b.hash=r.blob LEFT JOIN archive_labels l ON l.document_id=d.id WHERE r.rowid=(SELECT max(x.rowid) FROM revisions x WHERE x.document_id=d.id) ORDER BY p.number,d.name').fetchall():
+            for row in c.execute('SELECT r.id AS revision_id,r.blob AS sha256,r.created,d.id AS document_id,d.name,d.process_id,p.number,p.title,p.collection,b.mime,b.size,l.category,l.method FROM documents d JOIN processes p ON p.id=d.process_id JOIN revisions r ON r.document_id=d.id JOIN blobs b ON b.hash=r.blob LEFT JOIN archive_labels l ON l.document_id=d.id WHERE r.rowid=(SELECT max(x.rowid) FROM revisions x WHERE x.document_id=d.id) ORDER BY p.number,d.name').fetchall():
                 try: pid=a.process_access(c,row['process_id'],user)['id']
                 except HTTPException: continue
                 if process_id and pid!=process_id: continue
@@ -67,7 +67,7 @@ def register(appmod):
                 if text and text.casefold() not in (item['name']+' '+item['number']+' '+item['title']).casefold(): continue
                 transfer=c.execute('SELECT id,status,category,web_url,remote_path,error FROM cloud_transfers WHERE revision_id=? AND destination=?',(item['revision_id'],dest)).fetchone()
                 item['sharepoint']=dict(transfer) if transfer else {'status':'not_queued'}
-                item['folder']=policy.relative_folder(item['number'],item['category'])
+                item['folder']=policy.relative_folder(item['number'],item['category'],item['collection'])
                 item['download_url']='/v1/document-revisions/'+item['revision_id']+'/download'
                 item['permissions']=[permission for permission in ('read','operate','review','admin') if _has(a,c,pid,user,permission)]
                 item['occurrences']=[dict(x) for x in c.execute('SELECT source,name,created FROM occurrences WHERE revision_id=? ORDER BY created',(item['revision_id'],))]
