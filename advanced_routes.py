@@ -10,8 +10,22 @@ from pydantic import BaseModel, Field
 import authorization
 import geo_domain
 import knowledge_domain
+import ai_classifier
+import os
 
 MAX_SPATIAL_BYTES = 20 * 1024 * 1024
+TYPOLOGY_VALUES = ('area_empreendimento', 'area_estudada', 'sitio_identificado', 'local_mencionado')
+_TYPOLOGY_SYSTEM = (
+    'Você classifica REFERÊNCIAS GEOGRÁFICAS de processos de arqueologia (IPHAN) em um de quatro tipos, '
+    'com base no nome do recurso e nos trechos do documento fornecidos. Tipos: '
+    '"area_empreendimento" (onde a obra/empreendimento acontece), '
+    '"area_estudada" (onde o arqueólogo efetivamente foi a campo), '
+    '"sitio_identificado" (sítio arqueológico identificado) e '
+    '"local_mencionado" (lugar apenas citado, sem ser objeto do estudo). '
+    'Se não houver base suficiente nos trechos, use confianca baixa. NUNCA invente além dos trechos. '
+    'Responda SOMENTE um objeto JSON com as chaves exatas: "tipologia" (um dos quatro valores), '
+    '"justificativa" (texto curto em português) e "confianca" (número de 0 a 1).'
+)
 
 class AssertionInput(BaseModel):
     process_id: str
@@ -33,6 +47,12 @@ class SpatialQuery(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     radius_m: float = Field(default=0, ge=0, le=1000000)
+    validated_only: bool = False
+
+class TypologyReview(BaseModel):
+    typology: Literal['area_empreendimento','area_estudada','sitio_identificado','local_mencionado','nao_classificado']
+    status: Literal['validado','rejeitado','pendente'] = 'validado'
+    rationale: str = Field(default='', max_length=3000)
 
 
 def _body_bytes(request):
@@ -147,7 +167,7 @@ def register(app, db, identity, uid, event, process_access, revision_access):
             blob=core.put_blob(raw,filename)
             core.persist_document(c,process['id'],filename,'spatial-import',user,blob)
             resource_id, revision_id = uid(), uid(); now = time.time(); digest = hashlib.sha256(raw).hexdigest()
-            c.execute('INSERT INTO spatial_resources VALUES(?,?,?,?,?,?,?)', (resource_id, process['id'], name[:300], filename[:300], digest, user['id'], now))
+            c.execute('INSERT INTO spatial_resources(id,process_id,name,source_filename,source_sha256,created_by,created) VALUES(?,?,?,?,?,?,?)', (resource_id, process['id'], name[:300], filename[:300], digest, user['id'], now))
             c.execute('INSERT INTO spatial_resource_revisions VALUES(?,?,?,?,?,?,?,?)', (revision_id, resource_id, 1, digest, parsed['srs'], geo_domain.dumps_features(parsed['features']), user['id'], now))
             event(c, user.get('_actor_id', user['id']), 'spatial.resource.created', resource_id)
             return {'id': resource_id, 'revision_id': revision_id, 'version': 1, 'feature_count': len(parsed['features']), 'srs': parsed['srs']}
@@ -187,6 +207,63 @@ def register(app, db, identity, uid, event, process_access, revision_access):
             result = dict(resource); result['revisions'] = revisions
             return result
 
+    @app.post('/v1/spatial-resources/{resource_id}/suggest-typology')
+    def suggest_typology(resource_id: str, user=Depends(identity)):
+        """A IA SUGERE a tipologia da referência geográfica a partir dos trechos do documento; fica PENDENTE até um humano confirmar."""
+        if not ai_classifier.available():
+            raise HTTPException(503, 'IA indisponível: configure OPENAI_API_KEY para sugerir tipologia')
+        with db() as c:
+            resource = c.execute('SELECT * FROM spatial_resources WHERE id=?', (resource_id,)).fetchone()
+            if not resource:
+                raise HTTPException(404, 'Recurso espacial não encontrado')
+            process = process_access(c, resource['process_id'], user, 'operate')
+            trechos = [r['text'] for r in c.execute(
+                'SELECT e.text FROM evidence e JOIN revisions r ON r.id=e.revision_id JOIN documents d ON d.id=r.document_id '
+                'WHERE d.process_id=? AND e.text IS NOT NULL ORDER BY e.rowid LIMIT 12', (process['id'],)).fetchall()]
+            proc = c.execute('SELECT number,title FROM processes WHERE id=?', (process['id'],)).fetchone()
+        contexto = ('Processo: ' + proc['number'] + ' — ' + (proc['title'] or '') + '\nRecurso geográfico: ' + resource['name']
+                    + '\n\nTrechos do documento:\n' + ('\n---\n'.join(t[:800] for t in trechos) if trechos else '(sem texto extraído disponível)'))
+        key = os.getenv('OPENAI_API_KEY')
+        try:
+            raw = ai_classifier._complete(key, ai_classifier._model(), [
+                {'role': 'system', 'content': _TYPOLOGY_SYSTEM},
+                {'role': 'user', 'content': contexto},
+            ])
+            parsed = json.loads(ai_classifier._strip_json(raw))
+            tipologia = str(parsed.get('tipologia') or '')
+            if tipologia not in TYPOLOGY_VALUES:
+                raise ValueError
+        except ai_classifier.AIError as exc:
+            raise HTTPException(502, str(exc))
+        except (ValueError, TypeError):
+            raise HTTPException(502, 'Resposta da IA ilegível')
+        justificativa = str(parsed.get('justificativa') or '')[:3000]
+        confianca = parsed.get('confianca') if isinstance(parsed.get('confianca'), (int, float)) else None
+        with db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            c.execute("UPDATE spatial_resources SET typology=?,typology_status='pendente',typology_source='ia',typology_rationale=? WHERE id=?",
+                      (tipologia, justificativa, resource_id))
+            event(c, user.get('_actor_id', user['id']), 'spatial.typology.suggested', resource_id)
+        return {'resource_id': resource_id, 'typology': tipologia, 'status': 'pendente', 'source': 'ia',
+                'rationale': justificativa, 'confidence': confianca, 'model': ai_classifier._model(),
+                'notice': 'Sugestão da IA; um humano precisa confirmar antes de alimentar o Geoportal.'}
+
+    @app.patch('/v1/spatial-resources/{resource_id}/typology')
+    def review_typology(resource_id: str, body: TypologyReview, user=Depends(identity)):
+        """O humano CONFIRMA (ou rejeita) a tipologia. Só o validado alimenta o Geoportal."""
+        with db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            resource = c.execute('SELECT * FROM spatial_resources WHERE id=?', (resource_id,)).fetchone()
+            if not resource:
+                raise HTTPException(404, 'Recurso espacial não encontrado')
+            process_access(c, resource['process_id'], user, 'review')
+            if body.status == 'validado' and body.typology == 'nao_classificado':
+                raise HTTPException(422, 'Para validar, escolha um dos quatro tipos (não "não classificado")')
+            c.execute('UPDATE spatial_resources SET typology=?,typology_status=?,typology_source=?,typology_validator=?,typology_rationale=? WHERE id=?',
+                      (body.typology, body.status, 'humano', user['id'], body.rationale, resource_id))
+            event(c, user.get('_actor_id', user['id']), 'spatial.typology.' + body.status, resource_id)
+        return {'resource_id': resource_id, 'typology': body.typology, 'status': body.status, 'validator': user['id']}
+
     @app.post('/v1/spatial-search')
     def spatial_search(body: SpatialQuery, user=Depends(identity)):
         with db() as c:
@@ -198,9 +275,13 @@ def register(app, db, identity, uid, event, process_access, revision_access):
             for pid in process_ids:
                 rows = c.execute('SELECT r.*,x.version,x.srs,x.feature_json FROM spatial_resources r JOIN spatial_resource_revisions x ON x.resource_id=r.id WHERE r.process_id=? AND x.version=(SELECT max(x2.version) FROM spatial_resource_revisions x2 WHERE x2.resource_id=r.id)', (pid,)).fetchall()
                 for row in rows:
+                    # Trava do Geoportal (Seção 6): com validated_only, só referências de tipologia validada por humano.
+                    if body.validated_only and row['typology_status'] != 'validado':
+                        continue
                     for feature in geo_domain.search(json.loads(row['feature_json']), body.latitude, body.longitude, body.radius_m):
-                        results.append({'resource_id': row['id'], 'resource_name': row['name'], 'process_id': pid, 'version': row['version'], 'srs': row['srs'], 'feature': feature})
-            return {'items': sorted(results, key=lambda item: item['feature']['distance_m']), 'spatial_available': True, 'units': 'metres', 'source': 'KML/KMZ, Shapefile, GeoJSON/JSON e GPX em WGS84'}
+                        results.append({'resource_id': row['id'], 'resource_name': row['name'], 'process_id': pid, 'version': row['version'], 'srs': row['srs'],
+                                        'typology': row['typology'], 'typology_status': row['typology_status'], 'feature': feature})
+            return {'items': sorted(results, key=lambda item: item['feature']['distance_m']), 'spatial_available': True, 'units': 'metres', 'validated_only': body.validated_only, 'source': 'KML/KMZ, Shapefile, GeoJSON/JSON e GPX em WGS84'}
 
     @app.get('/v1/overview/advanced')
     def advanced_overview(user=Depends(identity)):

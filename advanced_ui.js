@@ -37,7 +37,19 @@ views.spatial=async root=>{
   const resources=await api('/v1/spatial-resources?process_id='+encodeURIComponent(state.pid));
   const list=panel('Recursos espaciais');
   if(!resources.length) list.append(node('p','Nenhum recurso geográfico registrado.','empty'));
-  for(const r of resources){const row=node('div',undefined,'item');row.append(node('h3',r.name),node('small',`${r.source_filename} · ${r.feature_count} feições · versão ${r.version}`,'subtle'),button('Abrir recurso',async()=>detail('Recurso espacial',await api('/v1/spatial-resources/'+r.id))));list.append(row)}
+  const TLABEL={area_empreendimento:'Área do empreendimento',area_estudada:'Área estudada',sitio_identificado:'Sítio identificado',local_mencionado:'Local mencionado',nao_classificado:'Não classificado'};
+  for(const r of resources){const row=node('div',undefined,'item');
+    row.append(node('h3',r.name),node('small',`${r.source_filename} · ${r.feature_count} feições · versão ${r.version}`,'subtle'),
+      node('p',`Tipologia: ${TLABEL[r.typology]||r.typology} · ${r.typology_status}${r.typology_source?(' ('+r.typology_source+')'):''}`,'subtle'));
+    if(r.typology_rationale) row.append(node('small',r.typology_rationale,'subtle'));
+    const actions=node('div',undefined,'actions');
+    actions.append(button('Abrir recurso',async()=>detail('Recurso espacial',await api('/v1/spatial-resources/'+r.id))));
+    actions.append(button('Sugerir tipo (IA)',async()=>{const s=await api('/v1/spatial-resources/'+r.id+'/suggest-typology','POST',{});notify('IA sugeriu: '+(TLABEL[s.typology]||s.typology)+'. Confirme abaixo antes de ir ao Geoportal.');await navigate('spatial')}));
+    row.append(actions);
+    const cf=form(row,'Confirmar tipologia (humano)',async data=>{await api('/v1/spatial-resources/'+r.id+'/typology','PATCH',{typology:data.get('typology'),status:data.get('status')||'validado',rationale:data.get('rationale')||''});notify('Tipologia registrada.');await navigate('spatial')});
+    const sel=select(cf,'Tipo','typology',[['area_empreendimento','Área do empreendimento'],['area_estudada','Área estudada'],['sitio_identificado','Sítio identificado'],['local_mencionado','Local mencionado'],['nao_classificado','Não classificado']]);sel.value=r.typology;
+    select(cf,'Situação','status',[['validado','Validar'],['rejeitado','Rejeitar'],['pendente','Deixar pendente']]);
+    list.append(row)}
   root.append(list);
   if(can('operate')){
     const imp=panel('Importar recurso geográfico');

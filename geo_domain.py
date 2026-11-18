@@ -16,6 +16,12 @@ MAX_VECTOR_UNCOMPRESSED = 50 * 1024 * 1024
 MAX_FEATURES = 10000
 
 
+# Tipologia da referência geográfica (Seção 6 do escopo). A IA sugere; o humano confirma;
+# só o validado alimenta o Geoportal. 'nao_classificado' + 'pendente' é o estado inicial.
+TYPOLOGIES = ('area_empreendimento', 'area_estudada', 'sitio_identificado', 'local_mencionado', 'nao_classificado')
+TYPOLOGY_STATUS = ('pendente', 'validado', 'rejeitado')
+
+
 def migrate(db):
     with db() as c:
         c.executescript('''
@@ -41,6 +47,14 @@ def migrate(db):
         );
         CREATE INDEX IF NOT EXISTS spatial_process_idx ON spatial_resources(process_id);
         ''')
+        existing = {r['name'] for r in c.execute('PRAGMA table_info(spatial_resources)')}
+        for name, kind in (('typology', "TEXT NOT NULL DEFAULT 'nao_classificado'"),
+                           ('typology_status', "TEXT NOT NULL DEFAULT 'pendente'"),
+                           ('typology_source', 'TEXT'),
+                           ('typology_validator', 'TEXT'),
+                           ('typology_rationale', "TEXT NOT NULL DEFAULT ''")):
+            if name not in existing:
+                c.execute(f'ALTER TABLE spatial_resources ADD COLUMN {name} {kind}')
 
 
 def _local(element):
