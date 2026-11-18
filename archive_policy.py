@@ -5,7 +5,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
-STUDIES = ('PAPIPA','RAPIPA','PAIPA','RAIPA','PGPA','RAIPI','Educacao patrimonial','Outros documentos','A classificar')
+STUDIES = ('PAPIPA','RAPIPA','PAIPA','RAIPA','PGPA','RAIPI','FCA','TRE','Educacao patrimonial','Outros documentos','A classificar')
 GEO_EXTENSIONS = {'.kml','.kmz','.shp','.shx','.dbf','.prj','.cpg','.geojson','.gpx','.gpkg','.qgz','.qgs','.tif','.tiff'}
 MAX_BYTES = 128 * 1024 * 1024
 MIMES = {'.pdf':'application/pdf','.txt':'text/plain','.csv':'text/csv','.html':'text/html','.htm':'text/html','.zip':'application/zip','.7z':'application/x-7z-compressed','.rar':'application/vnd.rar','.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.tif':'image/tiff','.tiff':'image/tiff','.kml':'application/vnd.google-earth.kml+xml','.kmz':'application/vnd.google-earth.kmz','.gpx':'application/gpx+xml','.geojson':'application/geo+json','.json':'application/json','.xml':'application/xml','.shp':'application/octet-stream','.shx':'application/octet-stream','.dbf':'application/octet-stream','.prj':'text/plain','.cpg':'text/plain','.gpkg':'application/geopackage+sqlite3','.mdb':'application/x-msaccess','.accdb':'application/msaccess','.doc':'application/msword','.xls':'application/vnd.ms-excel','.qgz':'application/zip','.qgs':'application/xml'}
@@ -78,6 +78,9 @@ def category(name, title='', data=None):
     found=set(re.findall(r'\b(?:PAPIPA|RAPIPA|PAIPA|RAIPA|PGPA|RAIPI)\b',normalized))
     if len(found)==1: return found.pop(),'explicit_acronym'
     if len(found)>1: return 'A classificar','ambiguous_acronyms'
+    # Caracterização do empreendimento (FCA) e orientações do IPHAN (TRE) — siglas explícitas.
+    if re.search(r'\bFCA\b',normalized): return 'FCA','explicit_acronym'
+    if re.search(r'\bTRE\b',normalized): return 'TRE','explicit_acronym'
     if 'EDUCACAO PATRIMONIAL' in normalized: return 'Educacao patrimonial','explicit_title'
     if re.search(r'\b(OFICIO|DESPACHO|PARECER|PORTARIA|LICENCA|ATA)\b',normalized): return 'Outros documentos','administrative_title'
     return 'A classificar','no_explicit_type'

@@ -124,6 +124,15 @@ class BridgeTests(Fixture):
         with app.db() as c:
             self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'queued')
 
+    def test_fca_and_tre_recognized_as_document_types(self):
+        self.assertIn('FCA',policy.STUDIES);self.assertIn('TRE',policy.STUDIES)
+        self.assertEqual(policy.category('FCA_UFV_Seriemas.pdf')[0],'FCA')
+        self.assertEqual(policy.category('documento.pdf',title='TRE - Termo de Referencia Especifico')[0],'TRE')
+        # "TRE" como substring de outra palavra não pode classificar como TRE.
+        self.assertEqual(policy.category('trecho_do_relatorio.pdf')[0],'A classificar')
+        # Sigla de estudo continua tendo prioridade quando presente.
+        self.assertEqual(policy.category('8765432_RAIPI.pdf')[0],'RAIPI')
+
     def test_process_folder_uses_number_and_empreendimento(self):
         # Unidade: a pasta do processo passa a ser "número — nome do empreendimento".
         self.assertEqual(policy.process_folder('01422.000120/2011-70','UFV Seriemas'),'01422.000120-2011-70 — UFV Seriemas')

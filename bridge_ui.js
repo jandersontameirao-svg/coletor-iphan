@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const state={token:'',me:null,cap:null,tab:'collect',processes:[],poll:null,filter:{},page:0,construction:false};
-const categories=['Georreferenciados','PAPIPA','RAPIPA','PAIPA','RAIPA','PGPA','RAIPI','Educacao patrimonial','Outros documentos','A classificar'];
+const categories=['Georreferenciados','PAPIPA','RAPIPA','PAIPA','RAIPA','PGPA','RAIPI','FCA','TRE','Educacao patrimonial','Outros documentos','A classificar'];
 const labels={queued:'Na fila',running:'Coletando',waiting_for_user:'Ação necessária',partial:'Parcial',completed:'Coleta concluída',failed:'Falhou',cancelled:'Cancelado',uploading:'Enviando',uploaded:'Confirmado no SharePoint',waiting_for_connection:'Aguardando conexão',not_queued:'Sem envio'};
 const messages={microsoft_app_not_configured:'A instalação precisa dos identificadores do aplicativo Microsoft. Consulte o guia de instalação.',sharepoint_not_connected:'Conecte a conta Microsoft.',sharepoint_access_denied:'A conta não tem permissão para este destino.',invalid_grant:'A autorização Microsoft expirou. Conecte novamente.',reauthentication_required:'Conecte novamente à Microsoft.',authentication_expired:'O código de conexão expirou. Inicie outra conexão.',invalid_sharepoint_folder:'Use um link HTTPS da organização autorizada.',sharepoint_item_not_found:'Pasta não encontrada ou sem acesso.',graph_network_error:'Falha de conexão com a Microsoft. Tente novamente.'};
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
