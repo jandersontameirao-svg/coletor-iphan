@@ -67,7 +67,7 @@ def register(appmod):
                 if text and text.casefold() not in (item['name']+' '+item['number']+' '+item['title']).casefold(): continue
                 transfer=c.execute('SELECT id,status,category,web_url,remote_path,error FROM cloud_transfers WHERE revision_id=? AND destination=?',(item['revision_id'],dest)).fetchone()
                 item['sharepoint']=dict(transfer) if transfer else {'status':'not_queued'}
-                item['folder']=policy.relative_folder(item['number'],item['category'],item['collection'])
+                item['folder']=policy.relative_folder(item['number'],item['category'],item['collection'],item['title'])
                 item['download_url']='/v1/document-revisions/'+item['revision_id']+'/download'
                 item['permissions']=[permission for permission in ('read','operate','review','admin') if _has(a,c,pid,user,permission)]
                 item['occurrences']=[dict(x) for x in c.execute('SELECT source,name,created FROM occurrences WHERE revision_id=? ORDER BY created',(item['revision_id'],))]

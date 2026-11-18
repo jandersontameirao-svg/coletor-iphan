@@ -15,8 +15,10 @@ def safe_name(value, limit=180):
     value=re.sub(r'\s+', ' ', value).strip(' .')
     return (value or 'sem_nome')[:limit]
 
-def process_folder(number):
-    return safe_name(str(number).replace('/','-'))
+def process_folder(number, title=None):
+    base=safe_name(str(number).replace('/','-'))
+    name=safe_name(title) if title and str(title).strip() else ''
+    return (base+' — '+name) if name else base
 
 def inspect_zip(data):
     """Inventário limitado; nunca extrai, abre macros ou executa membros."""
@@ -80,7 +82,7 @@ def category(name, title='', data=None):
     if re.search(r'\b(OFICIO|DESPACHO|PARECER|PORTARIA|LICENCA|ATA)\b',normalized): return 'Outros documentos','administrative_title'
     return 'A classificar','no_explicit_type'
 
-def relative_folder(number, kind, collection=None):
-    base=process_folder(number)+'/'+('Georreferenciados' if kind=='Georreferenciados' else 'Documentos/'+kind)
+def relative_folder(number, kind, collection=None, title=None):
+    base=process_folder(number,title)+'/'+('Georreferenciados' if kind=='Georreferenciados' else 'Documentos/'+kind)
     name=safe_name(collection) if collection and str(collection).strip() else ''
     return (name+'/'+base) if name else base

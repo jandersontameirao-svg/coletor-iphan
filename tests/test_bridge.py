@@ -124,6 +124,35 @@ class BridgeTests(Fixture):
         with app.db() as c:
             self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'queued')
 
+    def test_process_folder_uses_number_and_empreendimento(self):
+        # Unidade: a pasta do processo passa a ser "número — nome do empreendimento".
+        self.assertEqual(policy.process_folder('01422.000120/2011-70','UFV Seriemas'),'01422.000120-2011-70 — UFV Seriemas')
+        self.assertEqual(policy.process_folder('01422.000120/2011-70',None),'01422.000120-2011-70')
+        self.assertEqual(policy.relative_folder('01422.000120/2011-70','RAIPI','Zanettini','UFV Seriemas'),'Zanettini/01422.000120-2011-70 — UFV Seriemas/Documentos/RAIPI')
+        # Ponta a ponta: o caminho enviado ao SharePoint carrega o nome do empreendimento.
+        revision=self.upload(b'RAIPI preservado',name='1234567_RAIPI.txt')
+        self.assertEqual(self.client.patch('/v1/processes/'+self.pid,headers=self.h,json={'number':self.number,'title':'Parque Solar Perola'}).status_code,200)
+        with app.db() as c:
+            c.execute('UPDATE bridge_settings SET checked=?,drive_id=?,folder_id=?',(time.time(),'drive-fixture','root-fixture'))
+            c.execute("UPDATE cloud_transfers SET status='cancelled' WHERE revision_id!=?",(revision['revision_id'],))
+        with patch.object(cloud.Graph,'ensure_folder',return_value='folder') as folder,patch.object(cloud.Graph,'put',return_value={'id':'remote','size':len(b'RAIPI preservado'),'webUrl':'https://x'}),patch.object(cloud.Graph,'verify',return_value={}):
+            self.assertTrue(cloud.sync_once(app))
+            self.assertIn('Parque Solar Perola',[call.args[2] for call in folder.call_args_list][0])
+        with app.db() as c:
+            self.assertIn('Parque Solar Perola',c.execute('SELECT remote_path FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0])
+
+    def test_renaming_title_requeues_uploaded_transfers_to_move(self):
+        revision=self.upload(b'RAIPI preservado',name='1234567_RAIPI.txt')
+        with app.db() as c:
+            c.execute('UPDATE bridge_settings SET checked=?,drive_id=?,folder_id=?',(time.time(),'drive-fixture','root-fixture'))
+            c.execute("UPDATE cloud_transfers SET status='cancelled' WHERE revision_id!=?",(revision['revision_id'],))
+        with patch.object(cloud.Graph,'ensure_folder',return_value='folder'),patch.object(cloud.Graph,'put',return_value={'id':'remote','size':len(b'RAIPI preservado'),'webUrl':'https://x'}),patch.object(cloud.Graph,'verify',return_value={}):
+            self.assertTrue(cloud.sync_once(app))
+        r=self.client.patch('/v1/processes/'+self.pid,headers=self.h,json={'number':self.number,'title':'Novo Empreendimento'})
+        self.assertEqual(r.status_code,200,r.text);self.assertEqual(r.json()['transfers_requeued'],1)
+        with app.db() as c:
+            self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'queued')
+
     def test_six_tabs_and_human_category_history(self):
         self.assertEqual(self.client.get('/').text.count('data-tab='),6)
         revision=self.upload(name='desconhecido.txt');did=revision['document_id']

@@ -247,16 +247,22 @@ def rename(pid: str,body: ProcessInput,user=Depends(identity)):
         row=process_access(c,pid,user,'admin')
         pid=row['id']
         if body.number!=''.join(row['number'].split()): raise HTTPException(422,'Número do processo é estável')
-        if row['title']!=body.title:
+        collection=(body.collection or '').strip() or None
+        title_changed=row['title']!=body.title
+        collection_changed=collection!=row['collection']
+        if title_changed:
             c.execute('UPDATE processes SET title=?,folder=? WHERE id=?',(body.title,f'{row["number"]} — {body.title}',pid))
             event(c,user['id'],'process.renamed',pid)
-        collection=(body.collection or '').strip() or None
-        if collection!=row['collection']:
+        if collection_changed:
             c.execute('UPDATE processes SET collection=? WHERE id=?',(collection,pid))
-            # Reenfileira os originais já enviados para que o sync os MOVA para a nova pasta de coleção
-            # (não duplica: o sync faz PATCH de parentReference quando o item já existe no SharePoint).
-            moved=c.execute("UPDATE cloud_transfers SET status='queued',attempts=0,available=0 WHERE status='uploaded' AND revision_id IN (SELECT r.id FROM revisions r JOIN documents d ON d.id=r.document_id WHERE d.process_id=?)",(pid,)).rowcount
             event(c,user.get('_actor_id',user['id']),'process.collection.set',pid)
+        moved=0
+        if title_changed or collection_changed:
+            # A pasta do SharePoint depende de número+título e da coleção; quando qualquer um muda,
+            # reenfileira os originais já enviados para o sync MOVÊ-los (PATCH de parentReference,
+            # sem duplicar) para a nova pasta.
+            moved=c.execute("UPDATE cloud_transfers SET status='queued',attempts=0,available=0 WHERE status='uploaded' AND revision_id IN (SELECT r.id FROM revisions r JOIN documents d ON d.id=r.document_id WHERE d.process_id=?)",(pid,)).rowcount
+        if collection_changed or title_changed:
             return {'id':pid,'collection':collection,'transfers_requeued':moved}
     return {'id':pid}
 
