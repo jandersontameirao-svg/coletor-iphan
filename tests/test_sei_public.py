@@ -71,6 +71,16 @@ class SeiPublicTests(Fixture):
         self.assertEqual(counts["documents_discovered"], 2)
         self.assertEqual(counts["downloaded"], 1)
 
+    def test_collection_tags_discovered_process_for_shared_folder(self):
+        jid = self.create_job({"source": "iphan", "operation": "collect_links", "input": {"urls": [PROCESS_URL], "collection": "Zanettini"}})
+        fetched = {"data": b"%PDF-1.4 x", "mime": "application/pdf", "name": "md_pesq_documento_consulta_externa.php.pdf", "original_name": "md_pesq_documento_consulta_externa.php", "source_url": DOCUMENT_URL, "final_url": DOCUMENT_URL}
+        with patch("sei_public.fetch_process_page", return_value=self.discovered_page()), patch("safe_fetch.fetch", return_value=fetched):
+            self.run_job(jid)
+        with app.db() as c:
+            parent = c.execute("SELECT process_id FROM link_items WHERE job_id=? AND kind='sei_process_page'", (jid,)).fetchone()
+            process = c.execute("SELECT collection FROM processes WHERE id=?", (parent["process_id"],)).fetchone()
+        self.assertEqual(process["collection"], "Zanettini")
+
     def test_real_process_page_with_captcha_script_is_stored_not_rejected(self):
         # A página real do SEI contém "captcha" (script de áudio-captcha embutido).
         # Antes, ao salvar o HTML, a heurística de login rejeitava a página boa (415).

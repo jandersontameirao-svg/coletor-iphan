@@ -105,7 +105,7 @@ def process_access(c,process_id,user,permission='read'):
     return authorization.process_access(c,process_id,user,permission)
 
 
-def ensure_discovered_process(c,number,title,user):
+def ensure_discovered_process(c,number,title,user,collection=None):
     """Cria somente para usuário humano o processo declarado em uma página pública SEI."""
     if user.get('_delegation') or user.get('kind','human')!='human':
         raise HTTPException(403,'Descoberta sem processo exige usuário humano sem delegação')
@@ -119,8 +119,9 @@ def ensure_discovered_process(c,number,title,user):
     pid=uid()
     title=(title or 'Processo público SEI/IPHAN').strip()[:300]
     folder=f'{number} — {title}'
+    collection=(collection or '').strip()[:300] or None
     try:
-        c.execute('INSERT INTO processes(id,owner,number,title,folder,domain,number_key) VALUES(?,?,?,?,?,?,?)',(pid,user['id'],number,title,folder,'central',key))
+        c.execute('INSERT INTO processes(id,owner,number,title,folder,domain,number_key,collection) VALUES(?,?,?,?,?,?,?,?)',(pid,user['id'],number,title,folder,'central',key,collection))
         c.execute("INSERT INTO process_registry VALUES('central',?,?)",(key,pid))
         c.execute('INSERT INTO resource_grants VALUES(?,?,?,?,?,?,?)',(uid(),pid,'user',user['id'],'admin',1,time.time()))
     except sqlite3.IntegrityError:
@@ -484,10 +485,11 @@ def job(body: JobInput,request: Request,user=Depends(identity)):
         with db() as c: revision_access(c,body.input['revision_id'],user,'operate')
         if not body.input.get('reprocess',False): extraction_key=body.input['revision_id']+':'+extraction.VERSION
     else:
-        if body.source!='iphan' or not set(body.input)<= {'url','urls','process_id'} or ('url' in body.input)==('urls' in body.input):
+        if body.source!='iphan' or not set(body.input)<= {'url','urls','process_id','collection'} or ('url' in body.input)==('urls' in body.input):
             raise HTTPException(422,'Coleta aceita somente url ou urls; busca por número não é suportada')
         links=[body.input['url']] if 'url' in body.input else body.input['urls']
         if not isinstance(links,list) or not 1<=len(links)<=50: raise HTTPException(422,'Informe entre 1 e 50 links')
+        if body.input.get('collection') is not None and not isinstance(body.input['collection'],str): raise HTTPException(422,'collection deve ser texto')
         if body.input.get('process_id'):
             if not isinstance(body.input['process_id'],str): raise HTTPException(422,'process_id inválido')
             with db() as c: process_access(c,body.input['process_id'],user,'operate')

@@ -119,7 +119,10 @@ def _discover_process_page(job, item, user, keeper):
                     raise safe_fetch.FetchError("process_mismatch", "A página SEI declara outro número de processo; remova a associação ou corrija o link")
                 process_id = process["id"]
             else:
-                process_id = app.ensure_discovered_process(c, page["number"], page["title"], user)
+                # Coleção opcional da coleta (ex.: "Zanettini"): agrupa os processos
+                # descobertos sob uma pasta única no SharePoint.
+                job_collection = json.loads(job["input"]).get("input", {}).get("collection")
+                process_id = app.ensure_discovered_process(c, page["number"], page["title"], user, collection=job_collection)
             if page_blob:
                 c.execute('INSERT OR IGNORE INTO blobs VALUES(?,?,?)',page_blob)
                 c.execute('INSERT INTO source_snapshots VALUES(?,?,?,?,?)',(app.uid(),process_id,page['source_url'],page_blob[0],time.time()))
