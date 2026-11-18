@@ -32,7 +32,7 @@ def inspect_zip(data):
                 raise ValueError('Compactado contém caminho inválido')
         return [{'name':x.filename,'size':x.file_size,'directory':x.is_dir()} for x in infos]
 
-def detect(data, name, allow_html=False):
+def detect(data, name, allow_html=False, trust_html=False):
     if not data or len(data)>MAX_BYTES: raise ValueError('Arquivo vazio ou acima de 128 MiB')
     suffix=Path(name).suffix.lower()
     if data.startswith(b'%PDF-'): return 'application/pdf'
@@ -58,7 +58,10 @@ def detect(data, name, allow_html=False):
     html=bool(re.search(r'<(?:!doctype\s+html|html|head|body)\b',text[:10000],re.I))
     if html:
         if not allow_html: raise ValueError('Página HTML não é documento autorizado')
-        if re.search(r'captcha|type\s*=\s*[\x27\"]password',text,re.I): raise ValueError('Página de autenticação/CAPTCHA')
+        # A heurística de captcha protege downloads de links contra páginas de login.
+        # Uma página já validada a montante (ex.: processo SEI com cookie do usuário)
+        # contém "captcha" no próprio script embutido e é confiável: não rejeitar.
+        if not trust_html and re.search(r'captcha|type\s*=\s*[\x27\"]password',text,re.I): raise ValueError('Página de autenticação/CAPTCHA')
         return 'text/html'
     if '\x00' in text: raise ValueError('Texto contém bytes binários')
     if suffix and suffix not in MIMES: raise ValueError('Extensão não suportada para preservação')

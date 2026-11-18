@@ -102,7 +102,9 @@ def _discover_process_page(job, item, user, keeper):
             with app.db() as c:
                 app.process_access(c, item["process_id"], user, "operate")
         page = sei_public.fetch_process_page(item["url"], keeper.guard, cookie=job.get("session_cookie"))
-        page_blob=app.put_blob(page['_raw_html'],'pagina_publica_sei.html') if page.get('_raw_html') else None
+        # Página já validada por sei_public (exigiu tblDocumentos + "Pesquisa Processual").
+        # Contém "captcha" no script embutido: confiável, não aplicar a heurística de login.
+        page_blob=app.put_blob(page['_raw_html'],'pagina_publica_sei.html',trust_html=True) if page.get('_raw_html') else None
         keeper.guard()
         with app.db() as c:
             c.execute("BEGIN IMMEDIATE")

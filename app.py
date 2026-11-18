@@ -277,8 +277,8 @@ def project(body: ProjectInput,user=Depends(identity)):
     with db() as c: c.execute('INSERT INTO projects VALUES(?,?,?,?)',(pid,user['id'],body.name,code))
     return {'id':pid,'code':code}
 
-def put_blob(data, name=''):
-    try: mime=archive_policy.detect(data,name,allow_html=Path(name).suffix.lower() in ('.html','.htm'))
+def put_blob(data, name='', trust_html=False):
+    try: mime=archive_policy.detect(data,name,allow_html=Path(name).suffix.lower() in ('.html','.htm'),trust_html=trust_html)
     except ValueError as exc: raise HTTPException(415,str(exc))
     digest=hashlib.sha256(data).hexdigest();path=ROOT/'blobs'/digest
     temporary=ROOT/'blobs'/('.'+uid())

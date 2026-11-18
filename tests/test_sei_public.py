@@ -71,6 +71,21 @@ class SeiPublicTests(Fixture):
         self.assertEqual(counts["documents_discovered"], 2)
         self.assertEqual(counts["downloaded"], 1)
 
+    def test_real_process_page_with_captcha_script_is_stored_not_rejected(self):
+        # A página real do SEI contém "captcha" (script de áudio-captcha embutido).
+        # Antes, ao salvar o HTML, a heurística de login rejeitava a página boa (415).
+        jid = self.create_process_job()
+        page = {**self.discovered_page(), "_raw_html": b"<html><body>Pesquisa Processual <table id='tblDocumentos'></table><script>infra_gerar_audio_captcha()</script></body></html>"}
+        fetched = {"data": b"%PDF-1.4 public document", "mime": "application/pdf", "name": "md_pesq_documento_consulta_externa.php.pdf", "original_name": "md_pesq_documento_consulta_externa.php", "source_url": DOCUMENT_URL, "final_url": DOCUMENT_URL}
+        with patch("sei_public.fetch_process_page", return_value=page), patch("safe_fetch.fetch", return_value=fetched):
+            row = self.run_job(jid)
+        self.assertEqual(row["status"], "partial")
+        with app.db() as c:
+            parent = c.execute("SELECT * FROM link_items WHERE job_id=? AND kind='sei_process_page'", (jid,)).fetchone()
+        # A página foi descoberta normalmente, sem cair em process_access_415.
+        self.assertEqual(parent["status"], "process_discovered")
+        self.assertNotIn("process_access_415", parent["detail"])
+
     def test_session_cookie_reaches_fetch_is_not_exposed_and_is_cleared(self):
         jid = self.create_job({"source": "iphan", "operation": "collect_links", "input": {"urls": [PROCESS_URL]}, "session_cookie": "PHPSESSID=segredo123"})
         seen = {}
