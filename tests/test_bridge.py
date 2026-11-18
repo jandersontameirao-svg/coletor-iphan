@@ -162,8 +162,9 @@ class BridgeTests(Fixture):
         with app.db() as c:
             self.assertEqual(c.execute('SELECT status FROM cloud_transfers WHERE revision_id=?',(revision['revision_id'],)).fetchone()[0],'queued')
 
-    def test_six_tabs_and_human_category_history(self):
-        self.assertEqual(self.client.get('/').text.count('data-tab='),6)
+    def test_tabs_and_human_category_history(self):
+        # 7 abas: Coleta, Acompanhamento, Andamento, Biblioteca, Atena, Observações, Configurações.
+        self.assertEqual(self.client.get('/').text.count('data-tab='),7)
         revision=self.upload(name='desconhecido.txt');did=revision['document_id']
         r=self.client.patch('/v1/bridge/documents/'+did+'/category',headers=self.h,json={'category':'RAIPI'})
         self.assertEqual(r.status_code,200,r.text)

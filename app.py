@@ -794,6 +794,8 @@ import atena_assistant
 atena_assistant.register(sys.modules[__name__])
 import observacoes_routes
 observacoes_routes.register(sys.modules[__name__])
+import tramitacao_routes
+tramitacao_routes.register(sys.modules[__name__])
 
 import access_routes
 import catalog_routes
