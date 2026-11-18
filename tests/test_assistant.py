@@ -68,3 +68,22 @@ class AssistantSearchTests(Fixture):
             res = self.client.post('/v1/assistant/search', headers=self.h,
                                    json={'question': 'algo sobre o sitio'})
         self.assertEqual(res.status_code, 503)
+
+    def test_chat_recovers_truncated_json(self):
+        # JSON cortado por resposta longa: antes virava "Resposta da IA ilegível".
+        truncated = '{"resposta":"Minha capacidade de acesso é limitada: só leio'
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}), \
+                patch.object(ai_classifier, '_complete', return_value=truncated):
+            res = self.client.post('/v1/assistant/chat', headers=self.h,
+                                   json={'message': 'qual sua capacidade de acesso?'})
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertIn('capacidade de acesso', res.json()['resposta'])
+
+    def test_chat_recovers_plain_text(self):
+        # Texto livre (sem JSON) também é aproveitado como resposta.
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}), \
+                patch.object(ai_classifier, '_complete', return_value='Não consigo abrir esses links.'):
+            res = self.client.post('/v1/assistant/chat', headers=self.h,
+                                   json={'message': 'consegue abrir os links?'})
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()['resposta'], 'Não consigo abrir esses links.')

@@ -122,7 +122,7 @@ def _complete_anthropic(key, model, messages):
         convo.pop(0)
     if not convo:
         convo = [{'role': 'user', 'content': '(sem conteúdo)'}]
-    payload = {'model': model, 'max_tokens': 4000, 'messages': convo}
+    payload = {'model': model, 'max_tokens': 8000, 'messages': convo}
     if system_parts:
         payload['system'] = '\n\n'.join(system_parts)
     base = (os.getenv('ANTHROPIC_BASE_URL') or 'https://api.anthropic.com').rstrip('/')

@@ -112,6 +112,27 @@ class AssistantSearch(BaseModel):
     process_id: str | None = Field(default=None, max_length=64)
 
 
+def _salvage_text(raw):
+    """Recupera a resposta quando o JSON não parseia (texto livre ou JSON truncado
+    por resposta longa). Tenta extrair o campo "resposta"; senão, limpa o texto cru."""
+    t = (raw or '').strip()
+    if not t:
+        return ''
+    # JSON possivelmente truncado: pega o conteúdo de "resposta":"..."
+    m = re.search(r'"resposta"\s*:\s*"((?:\\.|[^"\\])*)', t)
+    if m:
+        trecho = m.group(1)
+        try:
+            # decodifica escapes (\n, \", \uXXXX) do fragmento capturado
+            return json.loads('"' + trecho + '"')
+        except (ValueError, TypeError):
+            return trecho.replace('\\n', '\n').replace('\\"', '"').strip()
+    # Sem JSON reconhecível: remove cercas de código e devolve o texto como está.
+    t = re.sub(r'^```[a-zA-Z]*\n?', '', t)
+    t = re.sub(r'\n?```$', '', t).strip()
+    return t[:4000]
+
+
 def register(appmod):
     a = appmod
     app = a.app
@@ -225,13 +246,17 @@ def register(appmod):
         key = os.getenv('OPENAI_API_KEY')
         try:
             raw = ai_classifier._complete(key, ai_classifier._model(), messages_payload)
+        except ai_classifier.AIError as exc:
+            raise HTTPException(502, str(exc))
+        try:
             parsed = json.loads(ai_classifier._strip_json(raw))
             if not isinstance(parsed, dict):
                 raise ValueError
-        except ai_classifier.AIError as exc:
-            raise HTTPException(502, str(exc))
         except (ValueError, TypeError):
-            raise HTTPException(502, 'Resposta da IA ilegível')
+            # A IA respondeu em texto livre, ou o JSON veio truncado (resposta longa).
+            # Em vez de descartar, aproveita o texto como a própria resposta.
+            texto = _salvage_text(raw)
+            parsed = {'resposta': texto} if texto else {}
         resposta = str(parsed.get('resposta') or '').strip() or 'Não consegui formular uma resposta.'
         memoria = str(parsed.get('memoriaSugerida') or '').strip()[:1000]
         categoria = atena_memory.normalize_category(parsed.get('categoria'))
