@@ -15,6 +15,9 @@ MAX_BYTES=128*1024*1024
 TIMEOUT=15
 MAX_REDIRECTS=5
 DEFAULT_HOSTS=('www.gov.br','portal.iphan.gov.br','sei.iphan.gov.br')
+# Único host ao qual um cookie de sessão fornecido pelo usuário pode ser enviado.
+# Reavaliado a cada hop: um redirect para fora do SEI nunca leva o cookie junto.
+SEI_HOST='sei.iphan.gov.br'
 
 class FetchError(Exception):
     def __init__(self,code,action): self.code=code;self.action=action;super().__init__(code)
@@ -81,13 +84,16 @@ class PinnedTLS(http.client.HTTPSConnection):
             sock.close();raise
 
 
-def request_once(url,ip,guard):
+def request_once(url,ip,guard,cookie=None):
     parsed=validate_url(url);conn=PinnedTLS(parsed.hostname,ip)
     try:
         guard()
         path=quote(parsed.path or '/',safe="/%:@!$&'()*+,;=-._~")
         if parsed.query: path+='?'+quote(parsed.query,safe="/%?:@!$&'()*+,;=-._~")
-        conn.request('GET',path,headers={'Host':parsed.hostname,'Accept':'application/pdf,text/plain;q=0.9,text/html;q=0.5','Accept-Encoding':'identity','User-Agent':'Coletor-IPHAN/0.3 (explicit user links)'})
+        headers={'Host':parsed.hostname,'Accept':'application/pdf,text/plain;q=0.9,text/html;q=0.5','Accept-Encoding':'identity','User-Agent':'Coletor-IPHAN/0.3 (explicit user links)'}
+        # Cookie de sessão só vai para o próprio SEI; nunca é logado nem vaza em redirect.
+        if cookie and parsed.hostname==SEI_HOST: headers['Cookie']=cookie
+        conn.request('GET',path,headers=headers)
         response=conn.getresponse();headers={k.lower():v for k,v in response.getheaders()}
         if response.status in (301,302,303,307,308): return response.status,headers,b''
         length=headers.get('content-length')
@@ -110,12 +116,12 @@ def request_once(url,ip,guard):
     finally: conn.close()
 
 
-def fetch(url,guard=lambda:None):
+def fetch(url,guard=lambda:None,cookie=None):
     current=url
     for hop in range(MAX_REDIRECTS+1):
         parsed=validate_url(current);guard()
         ips=resolve_public(parsed.hostname)
-        status,headers,body=request_once(current,ips[0],guard)
+        status,headers,body=request_once(current,ips[0],guard,cookie)
         if status in (301,302,303,307,308):
             if hop==MAX_REDIRECTS or not headers.get('location'): raise FetchError('redirect_limit','Redirecionamento inválido/excessivo')
             current=urljoin(current,headers['location'])

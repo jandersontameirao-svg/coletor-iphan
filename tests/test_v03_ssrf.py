@@ -36,6 +36,26 @@ class SsrfTests(unittest.TestCase):
             with patch('safe_fetch.resolve_public',return_value=['8.8.8.8']),patch('safe_fetch.request_once',return_value=(200,{'content-type':'text/html'},body)):
                 with self.assertRaises(safe_fetch.FetchError) as ctx: safe_fetch.fetch(GOOD)
                 self.assertIn(ctx.exception.code,('access_barrier','page_not_document'))
+    def test_session_cookie_only_sent_to_sei_host(self):
+        class FakeResp:
+            status=200
+            def getheaders(self): return [('content-type','application/pdf')]
+            def read(self,*a): return b''
+        class FakeConn:
+            last={}
+            def __init__(self,host,ip): pass
+            def request(self,method,path,headers=None): FakeConn.last=dict(headers or {})
+            def getresponse(self): return FakeResp()
+            def close(self): pass
+        # No próprio SEI, o cookie de sessão acompanha a requisição.
+        with patch('safe_fetch.PinnedTLS',FakeConn):
+            safe_fetch.request_once('https://sei.iphan.gov.br/sei/x.pdf','8.8.8.8',lambda:None,cookie='PHPSESSID=abc')
+        self.assertEqual(FakeConn.last.get('Cookie'),'PHPSESSID=abc')
+        # Em qualquer outro host, o cookie NUNCA é enviado (nem em redirect).
+        with patch('safe_fetch.PinnedTLS',FakeConn):
+            safe_fetch.request_once('https://www.gov.br/x.pdf','8.8.8.8',lambda:None,cookie='PHPSESSID=abc')
+        self.assertNotIn('Cookie',FakeConn.last)
+
     def test_redirect_limit_and_http_429(self):
         for response in ((302,{'location':GOOD},b''),(429,{},b'')):
             with patch('safe_fetch.resolve_public',return_value=['8.8.8.8']),patch('safe_fetch.request_once',return_value=response):

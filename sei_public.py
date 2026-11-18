@@ -144,7 +144,7 @@ def parse_process_page(page: bytes, source_url: str) -> dict:
     }
 
 
-def fetch_process_page(url: str, guard=lambda: None) -> dict:
+def fetch_process_page(url: str, guard=lambda: None, cookie=None) -> dict:
     """Obtém uma página pública de processo com a mesma política de rede dos documentos."""
     if not is_process_url(url):
         raise safe_fetch.FetchError("unsupported_process_page", "Informe uma página pública de processo do SEI/IPHAN")
@@ -155,7 +155,7 @@ def fetch_process_page(url: str, guard=lambda: None) -> dict:
             raise safe_fetch.FetchError("redirect_not_allowed", "Redirecionamento fora da página pública de processo foi bloqueado")
         guard()
         ips = safe_fetch.resolve_public(parsed.hostname)
-        status, headers, body = safe_fetch.request_once(current, ips[0], guard)
+        status, headers, body = safe_fetch.request_once(current, ips[0], guard, cookie)
         if status in (301, 302, 303, 307, 308):
             if hop == safe_fetch.MAX_REDIRECTS or not headers.get("location"):
                 raise safe_fetch.FetchError("redirect_limit", "Redirecionamento inválido ou excessivo")

@@ -71,6 +71,33 @@ class SeiPublicTests(Fixture):
         self.assertEqual(counts["documents_discovered"], 2)
         self.assertEqual(counts["downloaded"], 1)
 
+    def test_session_cookie_reaches_fetch_is_not_exposed_and_is_cleared(self):
+        jid = self.create_job({"source": "iphan", "operation": "collect_links", "input": {"urls": [PROCESS_URL]}, "session_cookie": "PHPSESSID=segredo123"})
+        seen = {}
+        fetched = {"data": b"%PDF-1.4 public document", "mime": "application/pdf", "name": "md_pesq_documento_consulta_externa.php.pdf", "original_name": "md_pesq_documento_consulta_externa.php", "source_url": DOCUMENT_URL, "final_url": DOCUMENT_URL}
+
+        def fake_discover(url, guard=None, cookie=None):
+            seen["discover"] = cookie
+            return self.discovered_page()
+
+        def fake_download(url, guard=None, cookie=None):
+            seen["download"] = cookie
+            return fetched
+
+        with patch("sei_public.fetch_process_page", side_effect=fake_discover), patch("safe_fetch.fetch", side_effect=fake_download):
+            row = self.run_job(jid)
+        # O cookie do usuário chega tanto na descoberta da página quanto no download do documento.
+        self.assertEqual(seen["discover"], "PHPSESSID=segredo123")
+        self.assertEqual(seen["download"], "PHPSESSID=segredo123")
+        # Nunca é devolvido pela API...
+        self.assertIsNone(row.get("session_cookie"))
+        # ...nem persistido no comando/idempotência...
+        self.assertNotIn("session_cookie", json.loads(row["input"]))
+        # ...e é descartado do banco assim que a tarefa encerra.
+        with app.db() as c:
+            stored = c.execute("SELECT session_cookie FROM jobs WHERE id=?", (jid,)).fetchone()[0]
+        self.assertIsNone(stored)
+
     def test_existing_process_with_another_number_stays_pending_without_document_download(self):
         jid = self.create_job({"source": "iphan", "operation": "collect_links", "input": {"urls": [PROCESS_URL], "process_id": self.pid}})
         with patch("sei_public.fetch_process_page", return_value=self.discovered_page()):

@@ -101,7 +101,7 @@ def _discover_process_page(job, item, user, keeper):
         if item.get("process_id"):
             with app.db() as c:
                 app.process_access(c, item["process_id"], user, "operate")
-        page = sei_public.fetch_process_page(item["url"], keeper.guard)
+        page = sei_public.fetch_process_page(item["url"], keeper.guard, cookie=job.get("session_cookie"))
         page_blob=app.put_blob(page['_raw_html'],'pagina_publica_sei.html') if page.get('_raw_html') else None
         keeper.guard()
         with app.db() as c:
@@ -189,7 +189,7 @@ def _download_document(job, item, user, keeper):
             app.process_access(c, item["process_id"], user, "operate")
         if _metadata(item).get('access')=='restricted':
             raise safe_fetch.FetchError('no_public_document_url','Item sem link documental público; use importação manual autorizada')
-        data = safe_fetch.fetch(item["url"], keeper.guard)
+        data = safe_fetch.fetch(item["url"], keeper.guard, cookie=job.get("session_cookie"))
         keeper.guard()
         with app.db() as c:
             total = c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')", (job["id"],)).fetchone()[0]
@@ -252,6 +252,10 @@ def process_links(job, user, keeper):
         else:
             detail = "Alguns links ou documentos exigem correção, retomada ou importação manual"
         task_queue.finish(c, app.event, job, state, detail, checkpoint)
+        # Sessão do SEI é efêmera e secreta: descarta o cookie assim que a tarefa encerra.
+        # Em 'waiting_for_user' ele é mantido para a retomada (o usuário pode reusar a mesma sessão).
+        if state in ("completed", "partial", "failed"):
+            c.execute("UPDATE jobs SET session_cookie=NULL WHERE id=?", (job["id"],))
 
 
 def run_once(worker_id="local-worker"):

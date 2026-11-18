@@ -146,6 +146,10 @@ class JobInput(BaseModel):
     input: dict[str,Any] = Field(examples=[{'urls':['https://www.gov.br/iphan/documento.pdf'],'process_id':'<processo autorizado>'},{'revision_id':'<revisão autorizada>','reprocess':False}])
     refresh_policy: Literal['if_changed'] = 'if_changed'
     request_context: dict[str,str] = {}
+    # Cookie de sessão do SEI (opcional), colado pelo usuário já autenticado. Nunca é
+    # persistido no comando/idempotência nem devolvido; usado só para o host do SEI e
+    # descartado quando a tarefa encerra.
+    session_cookie: str | None = Field(default=None, max_length=8192)
 class UserInput(Login):
     role: str = 'operator'
 class UserState(BaseModel):
@@ -488,7 +492,10 @@ def job(body: JobInput,request: Request,user=Depends(identity)):
             if not isinstance(body.input['process_id'],str): raise HTTPException(422,'process_id inválido')
             with db() as c: process_access(c,body.input['process_id'],user,'operate')
         elif user.get('_delegation'): raise HTTPException(422,'Delegação exige processo no escopo')
-    payload=json.dumps(body.model_dump(),sort_keys=True,separators=(',',':')); jid=uid()
+    dump=body.model_dump()
+    # O cookie não entra no payload (nem no hash de idempotência): é segredo e muda a cada sessão.
+    session_cookie=(dump.pop('session_cookie',None) or '').strip() or None
+    payload=json.dumps(dump,sort_keys=True,separators=(',',':')); jid=uid()
     if len(payload.encode())>256*1024: raise HTTPException(413,'Comando acima de 256 KiB')
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
@@ -509,7 +516,7 @@ def job(body: JobInput,request: Request,user=Depends(identity)):
                         event(c,user.get('_actor_id',user['id']),'collection.authorization_revoked',cached_job['id'])
                     c.execute('UPDATE jobs SET extraction_key=NULL WHERE id=?',(cached_job['id'],))
                 if c.execute("SELECT count(*) FROM jobs WHERE owner=? AND status IN ('queued','running','waiting_for_user','paused')",(user['id'],)).fetchone()[0]>=100: raise HTTPException(429,'Limite de 100 tarefas pendentes')
-                c.execute('INSERT INTO jobs(id,owner,idem,input,status,checkpoint,detail,created,actor_id,delegation_id,extraction_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(jid,user['id'],key,payload,'queued','{}','Links recebidos; acesso e obtenção ainda não executados' if links else 'Aguardando extração',time.time(),user.get('_actor_id',user['id']),user.get('_delegation'),extraction_key))
+                c.execute('INSERT INTO jobs(id,owner,idem,input,status,checkpoint,detail,created,actor_id,delegation_id,extraction_key,session_cookie) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(jid,user['id'],key,payload,'queued','{}','Links recebidos; acesso e obtenção ainda não executados' if links else 'Aguardando extração',time.time(),user.get('_actor_id',user['id']),user.get('_delegation'),extraction_key,session_cookie))
                 seen={}
                 for index,url in enumerate(links):
                     item_id=uid();status='received';detail='Recebido; ainda não acessado'
@@ -542,7 +549,7 @@ def jobs(user=Depends(identity)):
     result=[]
     with db() as c:
         for row in c.execute('SELECT * FROM jobs ORDER BY created DESC').fetchall():
-            try: authorize_job(c,row,user);result.append({**dict(row),'lease_token':None})
+            try: authorize_job(c,row,user);result.append({**dict(row),'lease_token':None,'session_cookie':None})
             except (HTTPException,KeyError): continue
     return result
 
@@ -553,7 +560,7 @@ def job_status(jid: str,user=Depends(identity)):
         row=c.execute('SELECT * FROM jobs WHERE id=?',(jid,)).fetchone()
         if not row: raise HTTPException(404)
         authorize_job(c,row,user)
-        return {**dict(row),'lease_token':None}
+        return {**dict(row),'lease_token':None,'session_cookie':None}
 
 
 @app.get('/v1/collection-jobs/{jid}/links')
@@ -586,6 +593,8 @@ def cancel(jid: str,user=Depends(identity)):
 class ResumeInput(BaseModel):
     process_id: str | None = None
     retry_pending: bool = True
+    # Sessão do SEI expira rápido: na retomada o usuário pode colar um cookie novo.
+    session_cookie: str | None = Field(default=None, max_length=8192)
 
 
 @app.post('/v1/collection-jobs/{jid}/resume',status_code=202)
@@ -623,6 +632,8 @@ def resume(jid: str,body: ResumeInput | None=None,user=Depends(identity)):
                     if metadata.get('access')=='restricted' or metadata.get('truncated') or metadata.get('task_limit_reached'): continue
                     c.execute("UPDATE link_items SET status='received',detail='Retomada solicitada' WHERE id=?",(item['id'],))
         c.execute("UPDATE jobs SET status='queued',available_at=0,input=?,detail='Retomada solicitada; resultados confirmados preservados' WHERE id=?",(json.dumps(payload,sort_keys=True,separators=(',',':')),jid))
+        fresh_cookie=(body.session_cookie or '').strip()
+        if fresh_cookie: c.execute('UPDATE jobs SET session_cookie=? WHERE id=?',(fresh_cookie,jid))
         event(c,user.get('_actor_id',user['id']),'collection.resumed',jid)
     return {'job_id':jid,'status_url':f'/v1/collection-jobs/{jid}'}
 

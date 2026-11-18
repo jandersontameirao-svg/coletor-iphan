@@ -13,7 +13,7 @@ class LinkTests(Fixture):
         data={'urls':urls}
         if pid: data['process_id']=self.pid
         return {'source':'iphan','operation':'collect_links','input':data}
-    def mock_fetch(self,url,guard):
+    def mock_fetch(self,url,guard,cookie=None):
         guard()
         if url==LOGIN: raise safe_fetch.FetchError('access_barrier','Importe manualmente; login/CAPTCHA não será contornado')
         return {'data':b'Original do link','mime':'text/plain','name':'download.txt','source_url':url,'final_url':url}
