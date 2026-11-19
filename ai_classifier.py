@@ -171,6 +171,38 @@ def _complete_openai(key, model, messages):
         raise AIError('Resposta da IA ilegível') from exc
 
 
+def auto_classify(text, name='', title=''):
+    """Classificação automática da coleta: só devolve resultado APLICÁVEL (confiança alta).
+
+    Devolve None — deixando o documento em 'A classificar' para revisão humana — quando:
+    desligado por ambiente (COLLECTOR_AI_AUTOCLASSIFY=0), IA indisponível, sem texto,
+    erro de IA, confiança abaixo do limiar (COLLECTOR_AI_MIN_CONFIDENCE, padrão 0.8) ou a
+    própria IA respondeu 'A classificar'. Nunca levanta exceção: a coleta não pode quebrar
+    por causa da classificação.
+    """
+    if os.getenv('COLLECTOR_AI_AUTOCLASSIFY', '1').strip().lower() in ('0', 'false', 'no', ''):
+        return None
+    if not available():
+        return None
+    if not (text or '').strip():
+        return None
+    try:
+        threshold = float(os.getenv('COLLECTOR_AI_MIN_CONFIDENCE', '0.8'))
+    except (TypeError, ValueError):
+        threshold = 0.8
+    try:
+        result = suggest_category(text, name=name, title=title)
+    except AIError:
+        return None
+    category = result.get('category')
+    confidence = result.get('confidence')
+    if category in (None, 'A classificar'):
+        return None
+    if confidence is None or confidence < threshold:
+        return None
+    return result
+
+
 def suggest_category(text, name='', title=''):
     key = _active_key()
     if not key:

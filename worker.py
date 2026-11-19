@@ -266,7 +266,7 @@ def process_links(job, user, keeper):
 def run_once(worker_id="local-worker"):
     job = task_queue.claim(app.db, app.event, worker_id)
     if not job:
-        return False if app.DEMO_MODE else (app.sharepoint_store.sync_once(app) or app.market_domain.run_once(app) or app.atena_webhook.flush(app))
+        return False if app.DEMO_MODE else (app.ai_autoclassify.run_once(app) or app.sharepoint_store.sync_once(app) or app.market_domain.run_once(app) or app.atena_webhook.flush(app))
     run_id = None
     try:
         with LeaseKeeper(job) as keeper:

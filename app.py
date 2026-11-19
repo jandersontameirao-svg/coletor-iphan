@@ -22,6 +22,7 @@ import archive_policy
 import sharepoint_store
 import market_domain
 import ai_classifier
+import ai_autoclassify
 import atena_webhook
 from pypdf import PdfReader
 
@@ -292,6 +293,27 @@ def put_blob(data, name='', trust_html=False):
     finally:
         temporary.unlink(missing_ok=True)
     return digest,mime,len(data)
+
+
+def document_text(raw, mime, path):
+    """Texto determinístico para a IA ler; PDF tenta pypdf e depois OCR opcional. Nunca levanta."""
+    if mime == 'application/pdf':
+        text = ''
+        try:
+            reader = PdfReader(io.BytesIO(raw))
+            text = '\n'.join((page.extract_text() or '') for page in reader.pages[:40])
+        except Exception:
+            text = ''
+        if not text.strip() and ocr_optional.capability()['available']:
+            try:
+                text = '\n'.join(page for _, page in ocr_optional.extract_pdf(path))
+            except Exception:
+                text = ''
+        return text
+    try:
+        return document_extractors.extract(raw, mime)
+    except ValueError:
+        return ''
 
 
 def persist_document(c,pid,name,source,user,blob,from_link=False,original_name=None,external_key=None):
