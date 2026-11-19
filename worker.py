@@ -17,7 +17,10 @@ from fastapi import HTTPException
 
 stop = threading.Event()
 log = logging.getLogger("collector.worker")
-BATCH_QUOTA_BYTES = 2 * 1024 * 1024 * 1024
+# Teto de bytes baixados por tarefa. Processos grandes do SEI (100+ documentos)
+# estouram facilmente, então é configurável: na VPS defina COLLECTOR_BATCH_QUOTA_GIB
+# alto (ex.: 100) para não fragmentar a coleta. Padrão 2 GiB preserva o antigo.
+BATCH_QUOTA_BYTES = int(os.getenv("COLLECTOR_BATCH_QUOTA_GIB", "2")) * 1024 * 1024 * 1024
 MAX_DISCOVERED_DOCUMENTS_PER_JOB = 25_000
 # Quantos documentos baixar em paralelo (só a rede é paralela; a escrita no banco é serializada).
 DOWNLOAD_CONCURRENCY = max(1, min(16, int(os.getenv("COLLECTOR_DOWNLOAD_CONCURRENCY", "6"))))
@@ -229,7 +232,7 @@ def _persist_download(job, result, user, keeper):
                 raise extraction.LostLease()
             total = c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')", (job["id"],)).fetchone()[0]
             if total + blob[2] > BATCH_QUOTA_BYTES:
-                raise safe_fetch.FetchError("batch_quota", "Limite de 100 MiB por tarefa; divida a lista")
+                raise safe_fetch.FetchError("batch_quota", f"Limite de {BATCH_QUOTA_BYTES // (1024 * 1024 * 1024)} GiB por tarefa; divida a lista ou aumente COLLECTOR_BATCH_QUOTA_GIB")
             persisted = app.persist_document(c, item["process_id"], name, item["url"], user, blob, from_link=True, original_name=result["original_name"], external_key=metadata.get("document_number"))
             detail = "Documento público obtido; extração é etapa separada" if item.get("kind") == "sei_document" else "Documento obtido; extração é etapa separada"
             c.execute("UPDATE link_items SET status=?,revision_id=?,detail=? WHERE id=?", ("downloaded" if persisted["changed"] else "already_exists", persisted["revision_id"], detail, item["id"]))
