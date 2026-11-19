@@ -222,6 +222,11 @@ def _download_document(job, item, user, keeper):
             app.event(c, user.get("_actor_id", user["id"]), "collection.item.obtained", item["id"])
     except safe_fetch.FetchError as exc:
         _set_waiting(job, item, user, keeper, exc.code, exc.action)
+    except HTTPException as exc:
+        # Conteúdo recusado (ex.: sessão SEI expirada devolveu página de erro -> 415) ou acesso
+        # negado vira PENDÊNCIA DESTE ITEM, nunca falha da tarefa inteira (escopo, seção 4).
+        # Espelha o tratamento já feito em _discover_process_page.
+        _set_waiting(job, item, user, keeper, f"document_rejected_{exc.status_code}", str(exc.detail))
 
 
 def process_links(job, user, keeper):

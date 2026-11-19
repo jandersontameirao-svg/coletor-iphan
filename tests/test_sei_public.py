@@ -123,6 +123,20 @@ class SeiPublicTests(Fixture):
             stored = c.execute("SELECT session_cookie FROM jobs WHERE id=?", (jid,)).fetchone()[0]
         self.assertIsNone(stored)
 
+    def test_rejected_document_becomes_pendency_not_job_failure(self):
+        # Sessão SEI expirada devolve página de erro no lugar do arquivo: o documento é recusado
+        # (415), mas isso vira pendência DESTE item, nunca falha da tarefa inteira.
+        jid = self.create_process_job()
+        html = {"data": b"<html><body>Sessao expirada; refaca o login</body></html>", "mime": "application/pdf", "name": "doc.pdf", "original_name": "doc.pdf", "source_url": DOCUMENT_URL, "final_url": DOCUMENT_URL}
+        with patch("sei_public.fetch_process_page", return_value=self.discovered_page()), patch("safe_fetch.fetch", return_value=html):
+            row = self.run_job(jid)
+        self.assertNotEqual(row["status"], "failed")
+        self.assertEqual(row["status"], "waiting_for_user")
+        with app.db() as c:
+            public = c.execute("SELECT * FROM link_items WHERE job_id=? AND kind='sei_document' AND url=?", (jid, DOCUMENT_URL)).fetchone()
+        self.assertEqual(public["status"], "waiting_for_user")
+        self.assertIn("document_rejected_415", public["detail"])
+
     def test_existing_process_with_another_number_stays_pending_without_document_download(self):
         jid = self.create_job({"source": "iphan", "operation": "collect_links", "input": {"urls": [PROCESS_URL], "process_id": self.pid}})
         with patch("sei_public.fetch_process_page", return_value=self.discovered_page()):
