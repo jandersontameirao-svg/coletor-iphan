@@ -1,4 +1,5 @@
 import json
+import time
 from unittest.mock import patch
 
 from support import Fixture
@@ -155,6 +156,28 @@ class SeiPublicTests(Fixture):
         with app.db() as c:
             statuses = [r["status"] for r in c.execute("SELECT status FROM link_items WHERE job_id=? AND kind='sei_document'", (jid,)).fetchall()]
         self.assertEqual(statuses, ["downloaded"] * 5)
+
+    def test_queued_email_is_purged_before_download(self):
+        # E-mail/portaria descobertos ANTES de o filtro existir ficam na fila como
+        # 'received'. O worker os marca 'purged' na etapa de download, sem acessar a
+        # rede — nunca viram arquivo nem sobem ao SharePoint.
+        jid = self.create_process_job()
+        with app.db() as c:
+            c.execute(
+                "INSERT INTO link_items(id,job_id,position,url,status,detail,process_id,revision_id,duplicate_of,created,kind,parent_item_id,display_name,metadata) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (app.uid(), jid, 99, DOCUMENT_URL + "?mail", "received", "", self.pid, None, None, time.time(), "sei_document", None, "9999 — E-mail", "{}"),
+            )
+
+        def fetch(url, guard=None, cookie=None):
+            if "mail" in url:
+                raise AssertionError("e-mail nao deveria ser baixado")
+            return {"data": b"%PDF-1.4 ok", "mime": "application/pdf", "name": "d.pdf", "original_name": "d", "source_url": url, "final_url": url}
+
+        with patch("sei_public.fetch_process_page", return_value=self.discovered_page()), patch("safe_fetch.fetch", side_effect=fetch):
+            self.run_job(jid)
+        with app.db() as c:
+            mail = c.execute("SELECT status FROM link_items WHERE job_id=? AND display_name LIKE '%E-mail%'", (jid,)).fetchone()
+        self.assertEqual(mail["status"], "purged")
 
     def test_rejected_document_becomes_pendency_not_job_failure(self):
         # Sessão SEI expirada devolve página de erro no lugar do arquivo: o documento é recusado

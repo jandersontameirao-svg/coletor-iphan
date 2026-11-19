@@ -268,6 +268,21 @@ def process_links(job, user, keeper):
             if keeper.end.wait(0.2):
                 raise extraction.LostLease()
             continue
+        # 1.5) E-mail e Portaria estão fora do escopo (seção 3): itens que já estavam
+        # na fila (descobertos antes de o filtro existir) são removidos ANTES de baixar,
+        # então nunca viram arquivo nem sobem ao SharePoint. 'purged' é status neutro.
+        excluded = sei_public._excluded_types_pattern()
+        if excluded:
+            with app.db() as c:
+                pending = c.execute("SELECT id,display_name FROM link_items WHERE job_id=? AND status IN ('received','duplicate_pending') AND kind='sei_document'", (job["id"],)).fetchall()
+            drop = [row["id"] for row in pending if excluded.search(row["display_name"] or "")]
+            if drop:
+                with app.db() as c:
+                    c.execute("BEGIN IMMEDIATE")
+                    if not task_queue.held(c, job):
+                        raise extraction.LostLease()
+                    c.executemany("UPDATE link_items SET status='purged',detail='Tipo fora do escopo (e-mail/portaria); nao baixado' WHERE id=?", [(i,) for i in drop])
+                continue
         # 2) Documentos são baixados em lotes paralelos.
         with app.db() as c:
             rows = c.execute("SELECT * FROM link_items WHERE job_id=? AND status='received' AND kind IS NOT 'sei_process_page' ORDER BY position LIMIT ?", (job["id"], DOWNLOAD_CONCURRENCY)).fetchall()
