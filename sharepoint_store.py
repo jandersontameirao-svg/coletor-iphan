@@ -24,6 +24,22 @@ SCOPES='https://graph.microsoft.com/Files.ReadWrite.All offline_access'
 OFFICE_FORMATS={'.docx','.xlsx','.doc','.xls'}
 GRAPH='https://graph.microsoft.com/v1.0'
 LOCK=threading.RLock()
+# VPS compartilhada: quando ligado, o blob local é apagado assim que o envio ao
+# SharePoint é confirmado (e nenhum outro envio pendente ainda precisa dele). O
+# documento passa a existir só no SharePoint; o catálogo mantém metadados + link.
+DELETE_LOCAL_AFTER_UPLOAD=os.getenv('COLLECTOR_DELETE_LOCAL_AFTER_UPLOAD','0').lower() in ('1','true','yes','on')
+
+
+def _drop_local_blob(app, blob_hash):
+    """Remove o arquivo local do blob se TODOS os envios dele já foram concluídos.
+    Nunca apaga enquanto houver cloud_transfer pendente para o mesmo conteúdo."""
+    with app.db() as c:
+        pending=c.execute("SELECT 1 FROM cloud_transfers ct JOIN revisions rv ON rv.id=ct.revision_id WHERE rv.blob=? AND ct.status!='uploaded' LIMIT 1",(blob_hash,)).fetchone()
+    if pending: return
+    try:
+        (app.ROOT/'blobs'/blob_hash).unlink()
+    except (FileNotFoundError, OSError):
+        pass
 
 class CloudError(Exception):
     def __init__(self,code,status=503): self.code=code; self.status=status; super().__init__(code)
@@ -259,6 +275,8 @@ def sync_once(app):
             c.execute('BEGIN IMMEDIATE')
             updated=c.execute("UPDATE cloud_transfers SET status='uploaded',item_id=?,web_url=?,remote_path=?,error=NULL,lease=NULL,updated=? WHERE id=? AND lease=?",(result['id'],result.get('webUrl',''),'/'.join(folders+[filename]),time.time(),row['id'],lease))
             if updated.rowcount: app.event(c,row['actor_id'],'sharepoint.transfer.office_adjusted' if office else 'sharepoint.transfer.verified',row['id'])
+        if updated.rowcount and DELETE_LOCAL_AFTER_UPLOAD:
+            _drop_local_blob(app,r['blob'])
     except (CloudError,OSError) as e:
         code=e.code if isinstance(e,CloudError) else 'local_file_missing'
         auth_errors={'sharepoint_not_connected','reauthentication_required','invalid_grant','token_cache_unreadable','microsoft_app_not_configured'}
