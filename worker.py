@@ -1,7 +1,9 @@
 """Worker comum para links explícitos, páginas públicas SEI e extração isolada."""
 import argparse
+import concurrent.futures
 import json
 import logging
+import os
 import signal
 import threading
 import time
@@ -17,6 +19,8 @@ stop = threading.Event()
 log = logging.getLogger("collector.worker")
 BATCH_QUOTA_BYTES = 2 * 1024 * 1024 * 1024
 MAX_DISCOVERED_DOCUMENTS_PER_JOB = 25_000
+# Quantos documentos baixar em paralelo (só a rede é paralela; a escrita no banco é serializada).
+DOWNLOAD_CONCURRENCY = max(1, min(16, int(os.getenv("COLLECTOR_DOWNLOAD_CONCURRENCY", "6"))))
 
 
 class LeaseKeeper:
@@ -186,26 +190,39 @@ def _reuse_duplicate(job, item, keeper):
             c.execute("UPDATE link_items SET status='waiting_for_user',detail='Link repetido aguarda resolução do primeiro item' WHERE id=?", (item["id"],))
 
 
-def _download_document(job, item, user, keeper):
+def _fetch_document(job, item, user, keeper):
+    """Baixa o conteúdo (rede) e grava o blob em disco. NÃO escreve no banco — seguro em paralelo.
+
+    Devolve dict com os dados prontos para persistir, ou com 'error'=(code, detail) para virar
+    pendência. LostLease (perda de lease) não é capturado aqui: propaga para abortar a tarefa.
+    """
     try:
         if not item.get("process_id"):
             raise safe_fetch.FetchError("process_required", "Cadastre ou selecione processo e informe process_id na retomada; não foi realizado acesso externo")
         with app.db() as c:
             app.process_access(c, item["process_id"], user, "operate")
-        if _metadata(item).get('access')=='restricted':
-            raise safe_fetch.FetchError('no_public_document_url','Item sem link documental público; use importação manual autorizada')
+        metadata = _metadata(item)
+        if metadata.get('access') == 'restricted':
+            raise safe_fetch.FetchError('no_public_document_url', 'Item sem link documental público; use importação manual autorizada')
         data = safe_fetch.fetch(item["url"], keeper.guard, cookie=job.get("session_cookie"))
         keeper.guard()
-        with app.db() as c:
-            total = c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')", (job["id"],)).fetchone()[0]
-        if total + len(data["data"]) > BATCH_QUOTA_BYTES:
-            raise safe_fetch.FetchError("batch_quota", "Limite de 100 MiB por tarefa; divida a lista")
-        metadata = _metadata(item)
-        if metadata.get('access')=='restricted':
-            raise safe_fetch.FetchError('no_public_document_url','Item sem link documental público; use importação manual autorizada')
         name = sei_public.document_filename(metadata, data) if item.get("kind") == "sei_document" else data["name"]
         blob = app.put_blob(data["data"], name)
-        original_name = data.get("original_name", data["name"])
+        return {"item": item, "data": data, "blob": blob, "name": name, "original_name": data.get("original_name", data["name"]), "metadata": metadata}
+    except safe_fetch.FetchError as exc:
+        return {"item": item, "error": (exc.code, exc.action)}
+    except HTTPException as exc:
+        return {"item": item, "error": (f"document_rejected_{exc.status_code}", str(exc.detail))}
+
+
+def _persist_download(job, result, user, keeper):
+    """Grava no banco o resultado de um download. Roda SEMPRE em série (um escritor por vez)."""
+    item = result["item"]
+    if "error" in result:
+        _set_waiting(job, item, user, keeper, result["error"][0], result["error"][1])
+        return
+    data, blob, name, metadata = result["data"], result["blob"], result["name"], result["metadata"]
+    try:
         with app.db() as c:
             c.execute("BEGIN IMMEDIATE")
             if not task_queue.held(c, job):
@@ -213,10 +230,10 @@ def _download_document(job, item, user, keeper):
             total = c.execute("SELECT coalesce(sum(b.size),0) FROM link_items i JOIN revisions r ON r.id=i.revision_id JOIN blobs b ON b.hash=r.blob WHERE i.job_id=? AND i.status IN ('downloaded','already_exists','manual_imported')", (job["id"],)).fetchone()[0]
             if total + blob[2] > BATCH_QUOTA_BYTES:
                 raise safe_fetch.FetchError("batch_quota", "Limite de 100 MiB por tarefa; divida a lista")
-            result = app.persist_document(c, item["process_id"], name, item["url"], user, blob, from_link=True, original_name=original_name, external_key=metadata.get("document_number"))
+            persisted = app.persist_document(c, item["process_id"], name, item["url"], user, blob, from_link=True, original_name=result["original_name"], external_key=metadata.get("document_number"))
             detail = "Documento público obtido; extração é etapa separada" if item.get("kind") == "sei_document" else "Documento obtido; extração é etapa separada"
-            c.execute("UPDATE link_items SET status=?,revision_id=?,detail=? WHERE id=?", ("downloaded" if result["changed"] else "already_exists", result["revision_id"], detail, item["id"]))
-            c.execute("INSERT INTO link_captures VALUES(?,?,?,?,?,?,?)", (app.uid(), item["id"], item["url"], data["final_url"], result["sha256"], data["mime"], time.time()))
+            c.execute("UPDATE link_items SET status=?,revision_id=?,detail=? WHERE id=?", ("downloaded" if persisted["changed"] else "already_exists", persisted["revision_id"], detail, item["id"]))
+            c.execute("INSERT INTO link_captures VALUES(?,?,?,?,?,?,?)", (app.uid(), item["id"], item["url"], data["final_url"], persisted["sha256"], data["mime"], time.time()))
             checkpoint = link_summary(c, job["id"])
             c.execute("UPDATE jobs SET checkpoint=?,detail=? WHERE id=?", (json.dumps(checkpoint), "Documentos confirmados preservados; processando itens restantes", job["id"]))
             app.event(c, user.get("_actor_id", user["id"]), "collection.item.obtained", item["id"])
@@ -225,26 +242,47 @@ def _download_document(job, item, user, keeper):
     except HTTPException as exc:
         # Conteúdo recusado (ex.: sessão SEI expirada devolveu página de erro -> 415) ou acesso
         # negado vira PENDÊNCIA DESTE ITEM, nunca falha da tarefa inteira (escopo, seção 4).
-        # Espelha o tratamento já feito em _discover_process_page.
         _set_waiting(job, item, user, keeper, f"document_rejected_{exc.status_code}", str(exc.detail))
+
+
+def _download_batch(job, items, user, keeper):
+    """Baixa um lote de documentos: rede em paralelo, gravação no banco em série e em ordem."""
+    if len(items) == 1:
+        _persist_download(job, _fetch_document(job, items[0], user, keeper), user, keeper)
+        return
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(items)) as pool:
+        futures = [pool.submit(_fetch_document, job, item, user, keeper) for item in items]
+        results = [future.result() for future in futures]  # propaga LostLease para abortar a tarefa
+    for result in sorted(results, key=lambda r: r["item"]["position"]):
+        _persist_download(job, result, user, keeper)
 
 
 def process_links(job, user, keeper):
     while True:
         keeper.guard()
+        # 1) Descoberta de páginas de processo é sequencial (cria os documentos-filhos).
         with app.db() as c:
-            row = c.execute("SELECT * FROM link_items WHERE job_id=? AND status IN ('received','duplicate_pending') ORDER BY position LIMIT 1", (job["id"],)).fetchone()
-        if not row:
-            break
-        item = dict(row)
-        if item.get("kind") == "sei_process_page":
-            _discover_process_page(job, item, user, keeper)
-        elif item.get("duplicate_of"):
-            _reuse_duplicate(job, item, keeper)
-        else:
-            _download_document(job, item, user, keeper)
-        if keeper.end.wait(0.2):
-            raise extraction.LostLease()
+            page = c.execute("SELECT * FROM link_items WHERE job_id=? AND kind='sei_process_page' AND status='received' ORDER BY position LIMIT 1", (job["id"],)).fetchone()
+        if page:
+            _discover_process_page(job, dict(page), user, keeper)
+            if keeper.end.wait(0.2):
+                raise extraction.LostLease()
+            continue
+        # 2) Documentos são baixados em lotes paralelos.
+        with app.db() as c:
+            rows = c.execute("SELECT * FROM link_items WHERE job_id=? AND status='received' AND kind IS NOT 'sei_process_page' ORDER BY position LIMIT ?", (job["id"], DOWNLOAD_CONCURRENCY)).fetchall()
+        if rows:
+            _download_batch(job, [dict(r) for r in rows], user, keeper)
+            if keeper.end.wait(0.2):
+                raise extraction.LostLease()
+            continue
+        # 3) Duplicatas por último: o item original já terá sido baixado.
+        with app.db() as c:
+            dup = c.execute("SELECT * FROM link_items WHERE job_id=? AND status='duplicate_pending' ORDER BY position LIMIT 1", (job["id"],)).fetchone()
+        if dup:
+            _reuse_duplicate(job, dict(dup), keeper)
+            continue
+        break
 
     with app.db() as c:
         c.execute("BEGIN IMMEDIATE")

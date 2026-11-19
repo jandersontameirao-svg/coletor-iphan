@@ -138,6 +138,24 @@ class SeiPublicTests(Fixture):
             stored = c.execute("SELECT session_cookie FROM jobs WHERE id=?", (jid,)).fetchone()[0]
         self.assertIsNone(stored)
 
+    def test_parallel_batch_downloads_multiple_documents(self):
+        # Vários documentos públicos baixam em lote paralelo; todos chegam a 'downloaded'.
+        jid = self.create_process_job()
+        urls = [DOCUMENT_URL + "?" + str(i) for i in range(5)]
+        page = {**self.discovered_page(),
+                "documents": [{"document_number": f"900{i}", "title": f"Parecer {i}", "date": "01/01/2024", "included_at": "01/01/2024", "unit": "MG", "url": urls[i]} for i in range(5)],
+                "public_documents": 5, "restricted_documents": 0, "document_total": 5}
+
+        def fake_fetch(url, guard=None, cookie=None):
+            return {"data": b"%PDF-1.4 " + url.encode(), "mime": "application/pdf", "name": "d.pdf", "original_name": "d", "source_url": url, "final_url": url}
+
+        with patch("sei_public.fetch_process_page", return_value=page), patch("safe_fetch.fetch", side_effect=fake_fetch):
+            row = self.run_job(jid)
+        self.assertIn(row["status"], ("completed", "partial"))
+        with app.db() as c:
+            statuses = [r["status"] for r in c.execute("SELECT status FROM link_items WHERE job_id=? AND kind='sei_document'", (jid,)).fetchall()]
+        self.assertEqual(statuses, ["downloaded"] * 5)
+
     def test_rejected_document_becomes_pendency_not_job_failure(self):
         # Sessão SEI expirada devolve página de erro no lugar do arquivo: o documento é recusado
         # (415), mas isso vira pendência DESTE item, nunca falha da tarefa inteira.
