@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from html import unescape
+import os
 import re
 from urllib.parse import urljoin
 
@@ -12,6 +13,17 @@ PROCESS_HOST = "sei.iphan.gov.br"
 PROCESS_PATH = "/sei/modulos/pesquisa/md_pesq_processo_exibir.php"
 DOCUMENT_PATH = "/sei/modulos/pesquisa/md_pesq_documento_consulta_externa.php"
 MAX_DOCUMENTS_PER_PROCESS = 1_000
+# Tipos documentais que NÃO são coletados (nem baixados): acelera a coleta e atende ao escopo
+# do usuário (não precisamos de e-mail nem portaria). Configurável por ambiente; lista vazia = coleta tudo.
+EXCLUDED_TYPES_DEFAULT = "e-mail,portaria"
+
+
+def _excluded_types_pattern():
+    raw = os.getenv("COLLECTOR_EXCLUDED_DOC_TYPES", EXCLUDED_TYPES_DEFAULT)
+    terms = [t.strip() for t in raw.split(",") if t.strip()]
+    if not terms:
+        return None
+    return re.compile(r"\b(?:" + "|".join(re.escape(t) for t in terms) + r")", re.I)
 
 
 def is_process_url(url: str) -> bool:
@@ -86,6 +98,7 @@ def parse_process_page(page: bytes, source_url: str) -> dict:
     public_documents: list[dict] = []
     restricted_documents: list[dict] = []
     seen_urls: set[str] = set()
+    excluded = _excluded_types_pattern()
     for row in re.findall(r"<tr\b[^>]*>(.*?)</tr\s*>", _document_table(text), flags=re.I | re.S):
         cells = [_clean_html(cell) for cell in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]\s*>", row, flags=re.I | re.S)]
         document_index = next((i for i, value in enumerate(cells) if re.fullmatch(r"\d{4,}", value)), None)
@@ -94,6 +107,9 @@ def parse_process_page(page: bytes, source_url: str) -> dict:
         document_number = cells[document_index]
         values = cells[document_index + 1:]
         document_title = values[0] if values else f"Documento {document_number}"
+        # Tipo excluído (e-mail, portaria): nem entra na lista, para não baixar nem ocupar a fila.
+        if excluded and excluded.search(document_title):
+            continue
         dates = [value for value in values if re.fullmatch(r"\d{2}/\d{2}/\d{4}", value)]
         date = dates[0] if dates else ""
         included_at = dates[1] if len(dates) > 1 else ""

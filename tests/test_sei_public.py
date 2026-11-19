@@ -45,6 +45,21 @@ class SeiPublicTests(Fixture):
         self.assertEqual(result["documents"][0]["url"], "https://sei.iphan.gov.br/sei/modulos/pesquisa/md_pesq_documento_consulta_externa.php?abc")
         self.assertIsNone(result["documents"][1]["url"])
 
+    def test_excludes_email_and_portaria_types(self):
+        html = ('''<html><body>Pesquisa Processual
+        <table id="tblCabecalho"><tr><td>Processo:</td><td>01401.000108/2022-66</td></tr></table>
+        <table id="tblDocumentos">
+        <tr><td></td><td><a onclick="window.open('md_pesq_documento_consulta_externa.php?p1');">71111</a></td><td>Parecer Técnico</td><td>23/05/2023</td><td>23/05/2023</td><td>MG</td></tr>
+        <tr><td></td><td><a onclick="window.open('md_pesq_documento_consulta_externa.php?e1');">72222</a></td><td>E-mail Protocolo</td><td>23/05/2023</td><td>23/05/2023</td><td>MG</td></tr>
+        <tr><td></td><td><a onclick="window.open('md_pesq_documento_consulta_externa.php?po1');">73333</a></td><td>Portaria 45</td><td>23/05/2023</td><td>23/05/2023</td><td>MG</td></tr>
+        </table></body></html>''').encode("iso-8859-1")
+        result = sei_public.parse_process_page(html, PROCESS_URL)
+        titles = [d["title"] for d in result["documents"]]
+        self.assertIn("Parecer Técnico", titles)
+        self.assertFalse(any("mail" in t.lower() or "portaria" in t.lower() for t in titles))
+        self.assertEqual(result["public_documents"], 1)
+        self.assertEqual(result["document_total"], 1)
+
     def test_worker_registers_process_downloads_public_document_and_keeps_restricted_item_pending(self):
         jid = self.create_process_job()
         fetched = {"data": b"%PDF-1.4 public document", "mime": "application/pdf", "name": "md_pesq_documento_consulta_externa.php.pdf", "original_name": "md_pesq_documento_consulta_externa.php", "source_url": DOCUMENT_URL, "final_url": DOCUMENT_URL}
